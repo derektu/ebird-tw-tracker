@@ -15,11 +15,11 @@
     "test": "node --test",
     "check": "npm run typecheck && npm test && npm run build",
     "electron:dev": "electron .",
-    "electron:pack": "npm run build && electron-builder --dir",
-    "electron:build:mac": "npm run build && electron-builder --mac dmg",
+    "electron:pack": "npm run build && electron-builder --dir --publish never",
+    "electron:build:mac": "npm run build && electron-builder --mac dmg --publish never",
     "electron:build:mac:adhoc": "npm run electron:build:mac",
-    "electron:build:mac:all": "npm run build && electron-builder --mac dmg --x64 --arm64",
-    "electron:build:win": "npm run build && electron-builder --win nsis --x64",
+    "electron:build:mac:all": "npm run build && electron-builder --mac dmg --x64 --arm64 --publish never",
+    "electron:build:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "electron:dist": "npm run electron:build:mac"
   },
   "engines": {

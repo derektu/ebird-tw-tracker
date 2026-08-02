@@ -38,7 +38,9 @@ test("secure settings encrypts API keys at rest and restores them", async (conte
     apiKey: "secret-api-key",
     updatedAt: "2026-08-02T00:00:00.000Z",
   });
-  assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
+  if (process.platform !== "win32") {
+    assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
+  }
 });
 
 test("secure settings rejects writes when operating-system encryption is unavailable", async (context) => {

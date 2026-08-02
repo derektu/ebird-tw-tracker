@@ -15,9 +15,10 @@
     "test": "node --test",
     "check": "npm run typecheck && npm test && npm run build",
     "electron:dev": "electron .",
-    "electron:pack": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "electron:pack": "npm run build && electron-builder --dir",
     "electron:build:mac": "npm run build && electron-builder --mac dmg",
-    "electron:build:mac:adhoc": "npm run build && electron-builder --mac dmg -c.mac.identity=- -c.mac.entitlements=build/entitlements.mac.plist -c.mac.entitlementsInherit=build/entitlements.mac.plist",
+    "electron:build:mac:adhoc": "npm run electron:build:mac",
+    "electron:build:mac:all": "npm run build && electron-builder --mac dmg --x64 --arm64",
     "electron:build:win": "npm run build && electron-builder --win nsis --x64",
     "electron:dist": "npm run electron:build:mac"
   },
@@ -45,6 +46,7 @@
     "productName": "eBird Taiwan Tracker",
     "asar": true,
     "directories": {
+      "buildResources": "build",
       "output": "release"
     },
     "files": [
@@ -55,9 +57,14 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
+      "icon": "build/icon.icns",
+      "identity": "-",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": ["dmg"]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

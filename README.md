@@ -98,21 +98,21 @@ npm start
 
 所有 Electron 產物位於 `release/`。
 
-### macOS 未簽章開發目錄
+### macOS ad-hoc app 目錄
 
 ```bash
 npm run electron:pack
 ```
 
-這個指令建立 unpacked `.app`，並停用 certificate auto-discovery，適合本機功能驗證。
+這個指令建立 unpacked `.app`，並套用專案的 ad-hoc 簽章設定，適合本機功能驗證。
 
 ### macOS ad-hoc 簽章
 
 ```bash
-npm run electron:build:mac:adhoc
+npm run electron:build:mac
 ```
 
-ad-hoc 簽章不需要 Apple Developer 帳號。它使用本機臨時身分簽署並套用 Electron 執行所需的 entitlement，適合本機測試或內部開發。
+這是本專案採用的 macOS release 方式。ad-hoc 簽章不需要 Apple Developer 帳號；它使用臨時身分簽署並套用 Electron 執行所需的 entitlement，適合自行下載、測試或小範圍分享。
 
 ad-hoc 簽章不是受信任的公開發佈簽章：
 
@@ -121,48 +121,14 @@ ad-hoc 簽章不是受信任的公開發佈簽章：
 - 其他 Mac 仍可能顯示 Gatekeeper 警告或要求使用者手動允許。
 - 自建 root certificate 或一般 self-signed certificate 不會被 macOS Gatekeeper 視為 Developer ID。
 
-### macOS 正式 DMG
+可以用以下指令驗證 ad-hoc 簽章：
 
 ```bash
-npm run electron:build:mac
+codesign --verify --deep --strict --verbose=2 "release/mac-arm64/eBird Taiwan Tracker.app"
+codesign -dv --verbose=4 "release/mac-arm64/eBird Taiwan Tracker.app"
 ```
 
-對外散佈需要 Apple Developer Program 的 `Developer ID Application` certificate，以及 Apple notarization。
-
-1. 加入 [Apple Developer Program](https://developer.apple.com/programs/)。
-2. 從 Xcode 或 Apple Developer 的 Certificates, Identifiers & Profiles 建立 `Developer ID Application` certificate。
-3. 將 certificate 安裝到登入 Keychain，並確認系統可找到簽章身分：
-
-   ```bash
-   security find-identity -v -p codesigning
-   ```
-
-4. 設定 notarization credentials。electron-builder 支援 App Store Connect API key：
-
-   ```bash
-   export APPLE_API_KEY=/absolute/path/to/AuthKey_XXXXXXXXXX.p8
-   export APPLE_API_KEY_ID=XXXXXXXXXX
-   export APPLE_API_ISSUER=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-   npm run electron:build:mac
-   ```
-
-   CI 也可以使用匯出的 `.p12` certificate：
-
-   ```bash
-   export CSC_LINK=/absolute/path/to/developer-id-application.p12
-   export CSC_KEY_PASSWORD='certificate-password'
-   ```
-
-5. 驗證產物：
-
-   ```bash
-   codesign --verify --deep --strict --verbose=2 "release/mac-arm64/eBird Taiwan Tracker.app"
-   spctl --assess --type execute --verbose=4 "release/mac-arm64/eBird Taiwan Tracker.app"
-   ```
-
-Certificate、`.p12`、`.p8` 及密碼只能放在 Keychain 或 CI secrets，不可提交到 Git。
-
-更多細節請參考 [Apple Developer ID](https://developer.apple.com/developer-id/)、[Apple notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) 與 [electron-builder macOS code signing](https://www.electron.build/docs/features/code-signing/code-signing-mac/)。
+`Signature=adhoc` 代表 ad-hoc 簽章已套用。更多細節請參考 [electron-builder macOS code signing](https://www.electron.build/docs/features/code-signing/code-signing-mac/)。
 
 ### Windows x64 NSIS installer
 
@@ -170,19 +136,20 @@ Certificate、`.p12`、`.p8` 及密碼只能放在 Keychain 或 CI secrets，不
 npm run electron:build:win
 ```
 
-這個指令建立 Windows x64 NSIS installer。未提供 certificate 時仍可產生 installer，但 Windows 會顯示 Unknown publisher，SmartScreen 也可能阻擋或警告。
-
-Windows 正式簽章可使用 CA 核發的 OV／EV code-signing certificate，或 Azure Trusted Signing。使用可匯出的 `.pfx` certificate 時設定：
-
-```powershell
-$env:WIN_CSC_LINK = "C:\secrets\windows-code-signing.pfx"
-$env:WIN_CSC_KEY_PASSWORD = "certificate-password"
-npm run electron:build:win
-```
+這個指令建立 Windows x64 NSIS installer。目前專案不提供 Windows signing certificate，因此 installer 會顯示 Unknown publisher，SmartScreen 也可能阻擋或警告。一般 self-signed certificate 不會被其他使用者的 Windows 信任；除非先在每台機器安裝並信任該 certificate，否則無法解決 publisher 警告，因此 release 維持 unsigned。
 
 Windows installer 最可靠的建置環境是 Windows 本機或 GitHub Actions `windows-latest`。未包含 native Node module 時，electron-builder 通常也能從 macOS cross-build Windows 產物，但正式簽章與安裝測試應在 Windows 執行。
 
 Windows build 設定使用 assisted NSIS installer，允許使用者選擇安裝目錄，並建立桌面及 Start Menu 捷徑。相關選項請參考 [electron-builder Windows](https://www.electron.build/docs/win/) 與 [NSIS 文件](https://www.electron.build/docs/nsis/)。
+
+## GitHub Actions
+
+專案有兩條互相獨立的 workflow：
+
+- `CI`：每次 push 或 pull request 到 `main` 時，在 Ubuntu 執行 `npm ci` 與 `npm run check`。它會檢查 TypeScript、執行自動化測試並確認 Vite production build 成功，不會打包 Electron installer。
+- `Build desktop installers`：手動執行，或 push `v*` tag 時啟動。macOS runner 產生 x64 與 arm64 ad-hoc signed DMG；Windows runner 產生 unsigned x64 NSIS installer。產物保留在該次 Actions run 的 Artifacts 14 天，不會自動建立 GitHub Release。
+
+Build workflow 不需要 eBird API key，也不會保存 application data。它沒有 Developer ID、notarization 或 Windows publisher certificate，因此 GitHub Actions 能完成打包，但不會讓作業系統把 installer 視為受信任的 publisher。
 
 ## 資料與安全
 
@@ -199,7 +166,7 @@ electron/   Electron main process、preload、安全設定儲存
 server/     HTTP API、eBird client、追蹤服務、domain 與 JSON storage
 src/        React／TypeScript 前端
 test/       Node test runner 自動化測試
-build/      Electron build entitlement 與後續 build resources
+build/      Electron app icon、entitlement 與 build resources
 docs/       開發與架構文件
 ```
 
@@ -212,9 +179,9 @@ docs/       開發與架構文件
 | `npm run typecheck` | TypeScript 型別檢查 |
 | `npm test` | 執行自動化測試 |
 | `npm run check` | 型別、測試及 production build |
-| `npm run electron:pack` | 建立 macOS 未簽章 unpacked app |
-| `npm run electron:build:mac:adhoc` | 建立 macOS ad-hoc DMG |
-| `npm run electron:build:mac` | 建立 macOS 正式 DMG；有憑證時簽章與 notarize |
+| `npm run electron:pack` | 建立 macOS ad-hoc signed unpacked app |
+| `npm run electron:build:mac` | 建立目前架構的 macOS ad-hoc signed DMG |
+| `npm run electron:build:mac:all` | 建立 x64 與 arm64 macOS ad-hoc signed DMG |
 | `npm run electron:build:win` | 建立 Windows x64 NSIS installer |
 
 ## 授權

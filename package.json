@@ -1,0 +1,75 @@
+{
+  "name": "ebird-tracker",
+  "version": "0.1.0",
+  "description": "Taiwan eBird observation search and background tracking application",
+  "author": "Derek Tu",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "vite build",
+    "start": "NODE_ENV=production node server.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "check": "npm run typecheck && npm test && npm run build",
+    "electron:dev": "electron .",
+    "electron:pack": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "electron:build:mac": "npm run build && electron-builder --mac dmg",
+    "electron:build:mac:adhoc": "npm run build && electron-builder --mac dmg -c.mac.identity=- -c.mac.entitlements=build/entitlements.mac.plist -c.mac.entitlementsInherit=build/entitlements.mac.plist",
+    "electron:build:win": "npm run build && electron-builder --win nsis --x64",
+    "electron:dist": "npm run electron:build:mac"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.28.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.22",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0"
+  },
+  "build": {
+    "appId": "com.derektu.ebird-tw-tracker",
+    "productName": "eBird Taiwan Tracker",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "server/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true
+    }
+  }
+}

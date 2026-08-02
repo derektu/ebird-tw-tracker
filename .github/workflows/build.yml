@@ -28,7 +28,7 @@ jobs:
       - name: Build ad-hoc signed DMGs
         run: npm run electron:build:mac:all
       - name: Upload macOS installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ebird-taiwan-tracker-macos
           path: |
@@ -55,7 +55,7 @@ jobs:
       - name: Build unsigned installer
         run: npm run electron:build:win
       - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ebird-taiwan-tracker-windows-x64
           path: |

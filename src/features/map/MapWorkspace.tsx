@@ -6,6 +6,7 @@ import type { Tracker } from "../tracking/types";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
+const SHOW_SELECTED_CHECKLIST_CARD = false;
 
 interface MapEntry {
   marker: Marker;
@@ -250,34 +251,36 @@ export function MapWorkspace() {
         >
           顯示全台
         </button>
-        <section className="selected-card">
-          <div>
-            <strong>
-              {activeObservation
-                ? `${activeObservation.comName || species?.comName || "鳥種"} · ${activeObservation.locName}`
-                : observations.length
-                  ? "尚未選擇紀錄"
-                  : "沒有找到紀錄"}
-            </strong>
-            <span>
-              {activeObservation
-                ? `${activeObservation.obsDt} / ${activeObservation.howMany ?? "?"} 隻 / ${activeObservation.subId}`
-                : observations.length
-                  ? "請點選地圖 marker 或右側列表。"
-                  : "請調整鳥種或日期範圍。"}
-            </span>
-          </div>
-          {activeObservation && (
-            <a
-              className="selected-link"
-              href={`https://ebird.org/checklist/${encodeURIComponent(activeObservation.subId)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Checklist
-            </a>
-          )}
-        </section>
+        {SHOW_SELECTED_CHECKLIST_CARD && (
+          <section className="selected-card">
+            <div>
+              <strong>
+                {activeObservation
+                  ? `${activeObservation.comName || species?.comName || "鳥種"} · ${activeObservation.locName}`
+                  : observations.length
+                    ? "尚未選擇紀錄"
+                    : "沒有找到紀錄"}
+              </strong>
+              <span>
+                {activeObservation
+                  ? `${activeObservation.obsDt} / ${activeObservation.howMany ?? "?"} 隻 / ${activeObservation.subId}`
+                  : observations.length
+                    ? "請點選地圖 marker 或右側列表。"
+                    : "請調整鳥種或日期範圍。"}
+              </span>
+            </div>
+            {activeObservation && (
+              <a
+                className="selected-link"
+                href={`https://ebird.org/checklist/${encodeURIComponent(activeObservation.subId)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Checklist
+              </a>
+            )}
+          </section>
+        )}
       </section>
 
       <aside className="side">

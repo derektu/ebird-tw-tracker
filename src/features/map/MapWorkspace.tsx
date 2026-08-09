@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
 import type { SearchRequest, SearchResult } from "../search/types";
 import type { Tracker } from "../tracking/types";
+import { prioritizeNotificationObservation } from "./notification-observations.mjs";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
@@ -152,12 +153,17 @@ export function MapWorkspace() {
   useEffect(() => {
     const handleResults = (event: Event) => {
       const result = (event as CustomEvent<SearchResult>).detail;
+      const pending = pendingNotificationRef.current;
+      const nextObservations =
+        pending?.species.speciesCode === result.species.speciesCode
+          ? prioritizeNotificationObservation(result.payload.observations, pending.observation)
+          : result.payload.observations;
       speciesRef.current = result.species;
       searchDaysRef.current = result.days;
-      observationsRef.current = result.payload.observations;
+      observationsRef.current = nextObservations;
       setSpecies(result.species);
-      setObservations(result.payload.observations);
-      setActiveIndex(result.payload.observations.length ? 0 : -1);
+      setObservations(nextObservations);
+      setActiveIndex(nextObservations.length ? 0 : -1);
     };
     const handleTrackers = (event: Event) => {
       trackersRef.current = (event as CustomEvent<{ trackers: Tracker[] }>).detail.trackers;
@@ -174,16 +180,14 @@ export function MapWorkspace() {
           await requestSpeciesSearch(selected.species, tracker?.days ?? searchDaysRef.current, requestId);
           return;
         }
-        const index = observationsRef.current.findIndex(
-          (observation) =>
-            observation.subId === selected.observation.subId && observation.obsDt === selected.observation.obsDt,
+        pendingNotificationRef.current = selected;
+        const nextObservations = prioritizeNotificationObservation(
+          observationsRef.current,
+          selected.observation,
         );
-        if (index >= 0) {
-          activate(index, true);
-        } else {
-          mapRef.current?.setView([selected.observation.lat, selected.observation.lng], 13, { animate: true });
-          publishStatus(`${selected.species.comName} 新紀錄：${selected.observation.locName}`);
-        }
+        observationsRef.current = nextObservations;
+        setObservations(nextObservations);
+        setActiveIndex(0);
       } catch (error) {
         pendingNotificationRef.current = null;
         publishStatus(error instanceof Error ? error.message : "通知定位失敗", true);

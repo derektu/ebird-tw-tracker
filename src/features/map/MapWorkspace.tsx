@@ -1,5 +1,6 @@
 import L, { type Map as LeafletMap, type Marker } from "leaflet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
 import type { SearchRequest, SearchResult } from "../search/types";
 import type { Tracker } from "../tracking/types";
@@ -50,6 +51,10 @@ function createPopup(observation: Observation) {
   locationType.textContent = observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點";
   popup.append(locationType);
 
+  const observerLine = document.createElement("div");
+  observerLine.hidden = true;
+  popup.append(observerLine);
+
   const checklistLine = document.createElement("div");
   const checklist = document.createElement("a");
   checklist.href = `https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`;
@@ -68,7 +73,17 @@ function createPopup(observation: Observation) {
   mapsLine.append(maps);
   popup.append(mapsLine);
 
-  return popup;
+  return {
+    element: popup,
+    showObserverLoading() {
+      observerLine.hidden = false;
+      observerLine.textContent = "觀察者：讀取中…";
+    },
+    showObserver(name: string | null) {
+      observerLine.hidden = !name;
+      observerLine.textContent = name ? `觀察者：${name}` : "";
+    },
+  };
 }
 
 function requestSpeciesSearch(species: Species, days: number, requestId: string) {
@@ -110,11 +125,28 @@ export function MapWorkspace() {
   const speciesRef = useRef<Species | null>(null);
   const searchDaysRef = useRef(3);
   const trackersRef = useRef<Tracker[]>([]);
+  const observerCacheRef = useRef(new Map<string, Promise<string | null>>());
   const pendingNotificationRef = useRef<ObservationEvent | null>(null);
   const requestSequence = useRef(0);
   const [species, setSpecies] = useState<Species | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
+
+  const loadObserverName = useCallback((subId: string) => {
+    const cache = observerCacheRef.current;
+    const cached = cache.get(subId);
+    if (cached) return cached;
+    const request = fetchJson<{ userDisplayName: string | null }>(
+      `/api/checklists/${encodeURIComponent(subId)}`,
+    )
+      .then((result) => result.userDisplayName)
+      .catch((error) => {
+        cache.delete(subId);
+        throw error;
+      });
+    cache.set(subId, request);
+    return request;
+  }, []);
 
   const activate = useCallback((index: number, zoomToPoint = false, openPopup = true) => {
     const entries = entriesRef.current;
@@ -208,10 +240,17 @@ export function MapWorkspace() {
     if (!map) return;
     entriesRef.current.forEach(({ marker }) => marker.remove());
     entriesRef.current = observations.map((observation, index) => {
+      const popup = createPopup(observation);
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === 0) })
         .addTo(map)
-        .bindPopup(createPopup(observation));
+        .bindPopup(popup.element);
       marker.on("click", () => activate(index));
+      marker.on("popupopen", () => {
+        popup.showObserverLoading();
+        void loadObserverName(observation.subId)
+          .then((name) => popup.showObserver(name))
+          .catch(() => popup.showObserver(null));
+      });
       return { marker, observation };
     });
     listItemsRef.current = [];
@@ -232,7 +271,7 @@ export function MapWorkspace() {
         publishStatus(`${pending.species.comName} 新紀錄：${pending.observation.locName}`);
       }
     }
-  }, [activate, observations]);
+  }, [activate, loadObserverName, observations]);
 
   const activeObservation = activeIndex >= 0 ? observations[activeIndex] : null;
   const birdCount = useMemo(

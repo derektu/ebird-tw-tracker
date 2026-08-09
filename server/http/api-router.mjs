@@ -73,6 +73,12 @@ export function createApiRouter({ settings, species, observations, tracking }) {
       });
       return;
     }
+
+    const checklistMatch = url.pathname.match(/^\/api\/checklists\/([^/]+)$/);
+    if (checklistMatch && request.method === "GET") {
+      jsonResponse(response, 200, await observations.checklist(decodeURIComponent(checklistMatch[1])));
+      return;
+    }
     if (url.pathname === "/api/tracking" && request.method === "GET") {
       jsonResponse(response, 200, { trackers: await tracking.list() });
       return;

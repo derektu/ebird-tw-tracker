@@ -1,186 +1,112 @@
-# 手動搜尋新增紀錄計劃
+# 手動搜尋 Search Discovery 規格
 
-## 目標
+## 目的
 
-鳥種搜尋會將本次成功取得的觀察紀錄與相同搜尋條件的上一次成功結果比較。首次出現在本次結果中的紀錄會獲得明確的「新增」標記，並排列在結果清單前方，讓使用者在主動重新查詢時立即看見新發現。
+鳥種搜尋會將本次完整成功的結果與相同 Search Scope 的 Search Baseline 比較。只出現在本次結果中的 checklist 會成為 Search Discovery，讓使用者在主動重新查詢時看見自上一次可比較搜尋以來出現的紀錄。
 
-這項能力屬於搜尋流程，不依賴背景排程、追蹤規則或通知事件。Desktop App 與 Search App 共用相同的比較邏輯，各自在目前瀏覽器環境的 IndexedDB 保存搜尋基準。
+Search Discovery 屬於手動搜尋流程。它不代表使用者一生中第一次看見某份 checklist，也不參與 Tracker 的背景監測、seen 集合或通知事件。
 
-## 產品行為
+本文件是 Search Discovery 的產品行為來源。實作安排不得重新定義本文件的 scope、identity、競態或失敗語意。
 
-### 搜尋基準
+## Search Scope
 
-每組搜尋條件擁有一份最近成功結果，稱為搜尋基準。搜尋條件由以下欄位識別：
+Search Scope 由下列搜尋條件組成：
 
 - `speciesCode`
 - `days`
-- `region`，目前固定為 `TW`
 
-不同鳥種或不同最近天數各自維護搜尋基準。未來若搜尋加入地區、座標範圍或其他會改變結果集合的條件，該條件也必須納入搜尋基準的識別資料。
+不同鳥種或不同最近天數各自擁有 Search Baseline。台灣是產品固定範圍，不屬於目前的 scope identity；只有在產品實際支援多地區、座標範圍或其他會改變結果集合的條件時，該條件才加入 Search Scope。
 
-首次成功搜尋只建立搜尋基準，所有紀錄都以一般紀錄呈現。後續相同條件的成功搜尋才會標示新增紀錄。
+## 觸發來源
 
-### 新增紀錄
+下列搜尋可以比較並推進 Search Baseline：
 
-一筆紀錄以 `speciesCode` 與 `subId` 的組合識別。同一鳥種、同一份 checklist 在兩次搜尋中視為同一筆紀錄。
+- 應用程式啟動後的正常自動搜尋。
+- 使用者明確送出的鳥種搜尋。
 
-本次結果存在、搜尋基準不存在的 identity 屬於新增紀錄。欄位內容的改變不產生新增標記；搜尋流程不呈現更新或刪除狀態，也不向使用者解釋未出現在本次結果中的舊紀錄。
+背景通知為了定位 observation 而觸發的搜尋只負責顯示與選取，不比較或推進手動搜尋的 Search Baseline。這項隔離避免使用者尚未主動查看結果時，通知導向流程先消耗 Search Discovery。
 
-### 排序與標記
+## Checklist identity
 
-右側結果清單依下列順序排列：
+一筆搜尋結果以 `speciesCode` 與 `subId` 的組合識別。同一鳥種、同一份 checklist 在兩次搜尋中視為同一筆紀錄。
 
-1. 新增紀錄。
+數量、觀察時間、地點、座標、observer 或 review 狀態的變化不產生 Search Discovery。本次不存在的舊 identity 不顯示刪除或離開結果集的狀態；它日後重新出現在搜尋結果時，可以再次成為 Search Discovery。
+
+## 比較行為
+
+每個 Search Scope 只保留最近一次成功提交的 Search Snapshot：
+
+- 沒有 Search Baseline 時，成功保存本次 snapshot，摘要顯示「已建立比較基準」，所有結果以一般紀錄呈現。
+- 存在 Search Baseline 時，本次存在而 baseline 不存在的 identity 是 Search Discovery。
+- 合法且完整的空結果是一次成功搜尋，會成為下一次的 Search Baseline。
+- 每次成功提交以完整的本次 identity 集合取代該 scope 的舊 snapshot，不累積 lifetime seen 集合，也不保留歷史版本。
+
+API 錯誤、資料 shape 或解析錯誤，以及失去畫面提交資格的 request 都不改變 Search Baseline。
+
+## Request freshness
+
+整個搜尋畫面採 global latest-request-wins。較新的搜尋開始後，較舊 request 的 response 不得：
+
+- 覆寫地圖、清單、摘要或錯誤狀態。
+- 提前清除較新 request 的 busy 狀態。
+- 寫入任何 Search Scope 的 snapshot。
+
+畫面與 snapshot 使用相同的提交資格，因此使用者沒有看到的過期結果不會在背景推進 baseline。
+
+## 儲存與失敗語意
+
+Desktop App 與本機 Web runtime 將 Search Snapshot 保存於本機 Node application 的專用資料檔。Cloudflare Search App 將 snapshot 保存於目前 browser origin 的 IndexedDB。兩種 runtime 不同步、匯入或匯出 baseline。
+
+snapshot 只包含 Search Scope、搜尋時間與去重後的 observation identity，不包含完整 observation、API key、使用者位置或 Tracker 資料。
+
+儲存失敗不得阻止一般搜尋結果顯示：
+
+- 已讀取 Search Baseline 並完成比較，但新 snapshot 寫入失敗時，畫面保留本次 Search Discovery，並警告「比較基準未更新；下次可能重複顯示」。
+- 沒有 Search Baseline 且首次 snapshot 寫入失敗時，畫面顯示一般搜尋結果與「無法建立比較基準」。
+- baseline 讀取失敗時，畫面顯示一般搜尋結果與「無法使用搜尋比較」，不把本次結果寫成推測性的替代 baseline。
+
+應用程式不提供查看、重設、刪除、匯出或同步 baseline 的管理介面。使用者刪除對應 app 或網站資料後，下一次搜尋會重新建立 baseline。
+
+## 顯示規則
+
+結果清單依下列順序排列：
+
+1. Search Discovery。
 2. 其餘本次紀錄。
 
-每一組內部維持 observation service 回傳的時間排序。新增紀錄在清單項目上顯示文字 badge，地圖上的對應 marker 使用一致且可辨識的新增樣式。顏色不是唯一提示，badge 或其他文字標示必須保留。
+每一組內部維持 observation service 回傳的時間順序。清單項目以文字 `新增` badge 標示 Search Discovery；對應 marker 使用額外的外框或 halo。新增、地點類型、目前選取與鳥隻數量是互相獨立的視覺維度，任一狀態不得覆蓋其他狀態。
 
-搜尋摘要顯示本次新增數量。沒有新增紀錄時，摘要顯示「沒有新增紀錄」；首次建立基準時，摘要顯示「已建立比較基準」，不使用零筆新增的語句暗示已完成比較。
+搜尋摘要具有五種可區分狀態：
 
-### 基準更新
+- 首次保存成功：`已建立比較基準`
+- 完成比較且有 discovery：`新增 N 筆`
+- 完成比較且沒有 discovery：`沒有新增紀錄`
+- 完成比較但保存失敗：顯示 discovery 結果及 baseline 未更新警告
+- 無 baseline 且無法保存，或 baseline 無法讀取：`無法使用搜尋比較；已顯示一般搜尋結果`
 
-搜尋基準只在完整搜尋成功後更新。API 錯誤、資料解析錯誤或已被較新 request 取代的結果不得覆寫基準。
+地圖與清單使用同一份 comparison 結果，不各自重新判定 identity。通知導向的選取可以改變畫面聚焦與清單投影，但不得改變 comparison 或 snapshot。
 
-本次結果完成比較並交付畫面後，整份本次結果成為下一次搜尋的基準。每個搜尋條件只保存一份基準，不保存歷史版本。
+## 與 Tracker 的邊界
 
-瀏覽器儲存由應用程式自行維護，不提供查看、匯出、重設或刪除基準的介面。使用者清除網站資料時，IndexedDB 會一併清除，下一次搜尋會重新建立基準。
-
-## 資料模型
-
-共用型別位於前端可引用、且不依賴 React、Node 或 Cloudflare runtime 的模組。
-
-```ts
-interface SearchScope {
-  speciesCode: string;
-  days: number;
-  region: "TW";
-}
-
-interface SearchSnapshot {
-  scope: SearchScope;
-  searchedAt: string;
-  observationIds: string[];
-}
-
-interface SearchComparison {
-  baselineAt: string | null;
-  baselineCreated: boolean;
-  newObservationIds: string[];
-}
-```
-
-搜尋基準只需要保存 observation identity，不保存完整 observation。搜尋畫面使用本次 API response 取得所有顯示欄位，因此 identity 集合足以判定新增紀錄，並能控制 IndexedDB 的容量。
-
-identity 由純函式產生：
-
-```ts
-function observationIdentity(observation: Observation): string {
-  return `${observation.speciesCode}|${observation.subId}`;
-}
-```
-
-`SearchResult` 包含比較結果，讓地圖、清單與狀態顯示使用同一份判定：
-
-```ts
-interface SearchResult {
-  requestId: string;
-  species: Species;
-  days: number;
-  payload: ObservationsResponse;
-  comparison: SearchComparison;
-}
-```
-
-## 模組安排
-
-```text
-src/
-  domain/
-    observation-identity.ts
-    search-comparison.ts
-  storage/
-    search-snapshot-store.ts
-    indexeddb-search-snapshot-store.ts
-  features/
-    search/
-      SearchToolbar.tsx
-      types.ts
-    map/
-      MapWorkspace.tsx
-```
-
-`search-comparison.ts` 接受本次 observations 與可選的上次 identity 集合，回傳 `SearchComparison`。模組是純函式，單元測試不需要瀏覽器或 HTTP server。
-
-`search-snapshot-store.ts` 定義儲存介面，IndexedDB 實作負責 database version、object store 與 transaction。儲存 key 由正規化後的 `SearchScope` 產生，避免不同條件互相覆蓋。
-
-## 搜尋流程
-
-`SearchToolbar` 的成功路徑依序執行：
-
-1. 取得並正規化最新 observations。
-2. 依 `SearchScope` 載入 IndexedDB 搜尋基準。
-3. 計算 `SearchComparison`。
-4. 將 observations 依新增狀態分組並保持組內時間順序。
-5. 發布包含 comparison 的搜尋結果。
-6. 確認 request 仍是該 scope 最新的成功 request。
-7. 將本次 identity 集合寫入 IndexedDB。
-
-同一 scope 的並行搜尋以 request sequence 控制提交順序。較舊 response 可以被忽略，但不得覆寫畫面或 IndexedDB 中較新的結果。
-
-IndexedDB 無法使用時，搜尋本身仍可運作。應用程式顯示一般搜尋結果與非阻斷錯誤狀態，不標示新增紀錄，也不退回使用 `localStorage` 保存大量搜尋基準。
-
-## 與背景追蹤的邊界
-
-手動搜尋比較不讀寫下列資料：
+手動搜尋比較不讀寫：
 
 - `trackers.json`
 - `seen-observations.json`
 - `events.json`
 
-手動搜尋不建立 notification event，也不把使用者看過的搜尋結果標記為背景追蹤已見紀錄。背景追蹤仍使用自己的累積 seen 集合，確保手動搜尋不會抑制後續系統通知。
+手動搜尋不建立 notification event，也不把搜尋結果加入 Tracker 的 seen 集合。Tracker 使用自己的 observation identity 與累積 seen 語意，確保手動搜尋不會抑制後續系統通知。
 
-## 測試
+## 驗收案例
 
-### Domain tests
-
-- 沒有搜尋基準時建立 baseline，且沒有新增 identity。
-- 相同 identity 集合回傳零筆新增。
-- 本次多出的 identity 被標示為新增。
-- 同一 identity 的其他欄位改變不被標示為新增。
-- 不再出現的 identity 不產生任何使用者狀態。
-- 不同 `days` 或 `speciesCode` 產生不同 scope key。
-
-### Storage tests
-
-- IndexedDB 可依 scope 讀寫最近一份 snapshot。
-- 同一 scope 的寫入會取代該 scope 的舊 snapshot。
-- 不同 scope 的 snapshot 互不覆蓋。
-- database upgrade 能建立預期 object store。
-
-### Search integration tests
-
-- 首次搜尋顯示「已建立比較基準」。
-- 第二次搜尋將新增紀錄排在清單前方並顯示 badge。
-- API 失敗不覆寫 snapshot。
-- 過期 response 不覆寫較新的 snapshot。
-- IndexedDB 失敗不阻止一般搜尋結果顯示。
-- 背景追蹤的 seen 與 events 檔案不因手動搜尋改變。
-
-## 交付順序
-
-1. 建立 identity、scope 與 comparison 純函式及單元測試。
-2. 建立 snapshot store 介面與 IndexedDB 實作。
-3. 將 comparison 接入搜尋成功流程與 `SearchResult`。
-4. 調整清單排序、badge、marker 與摘要狀態。
-5. 補齊並行 request、儲存失敗及背景追蹤隔離測試。
-6. 執行 typecheck、完整測試與 production build。
-
-## 完成條件
-
-- 相同搜尋條件的第二次成功搜尋能正確辨識新 checklist。
-- 新增紀錄在右側清單最前方，並具有文字與視覺標記。
-- 第一次搜尋、沒有新增、儲存失敗三種狀態可清楚區分。
-- API 失敗與過期 response 不改變搜尋基準。
-- 搜尋基準存在 IndexedDB，且每個 scope 只保留最近一份。
-- Desktop 的背景追蹤與通知行為維持獨立。
-- `npm run check` 通過。
+- 同一 Search Scope 的首次成功搜尋建立 baseline，不標示既有結果為新增。
+- 第二次成功搜尋只將 baseline 沒有的 checklist 標示為新增。
+- 同一 identity 的其他欄位改變不產生新增標記。
+- 一筆 checklist 離開結果集後再次出現，可以再次成為 Search Discovery。
+- 不同鳥種或不同天數不共用 baseline。
+- 合法空結果會取代舊 baseline。
+- 較舊 response 不覆寫畫面、busy 狀態或 snapshot。
+- 已完成比較但 snapshot 保存失敗時，新增結果仍可見，並顯示可能重複的警告。
+- 首次 snapshot 保存失敗時，不顯示「已建立比較基準」。
+- 通知導向搜尋不讀寫 Search Baseline。
+- Desktop 與 Search App 的 baseline 彼此獨立。
+- 手動搜尋不改變 Tracker 的 seen 與 events 資料。

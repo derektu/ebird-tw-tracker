@@ -2,19 +2,19 @@
 
 ## 產品定位
 
-Search App 是可在手機、平板與桌面瀏覽器執行的 responsive web app。它提供台灣鳥種搜尋、近期觀察地圖、結果清單與手動新增紀錄比較，不提供背景追蹤、通知、排程或伺服器端使用者資料。
+Search App 是可在手機、平板與桌面瀏覽器執行的 responsive web app。它提供台灣鳥種搜尋、近期觀察地圖、結果清單與 Search Discovery，不提供背景追蹤、通知、排程或伺服器端使用者資料。
 
 專案採自行部署模式。每位部署者將程式部署至自己的 Cloudflare 帳號，每位使用者使用自己的 eBird API key。Cloudflare deployment 不持有部署者共用的 eBird key，也不提供公共 eBird proxy service。
 
-Desktop App 與 Search App 位於同一個 repository。兩個 app 共用搜尋 domain、資料型別、地圖元件及新增紀錄比較，各自擁有入口、API client、憑證流程與外層版面。
+Desktop App 與 Search App 位於同一個 repository。兩個 app 共用搜尋 domain、資料型別、地圖元件及 Search Discovery，各自擁有入口、API client、憑證流程與外層版面。
 
 ## 系統架構
 
 ```text
 Search App browser
   ├─ React static assets
-  ├─ API key in memory
-  │    └─ optional localStorage persistence
+  ├─ API key in localStorage
+  ├─ recent species in localStorage
   ├─ search snapshots in IndexedDB
   └─ same-origin /api requests
           │
@@ -45,7 +45,7 @@ src/
     worker-client.ts
   domain/
     observation-identity.ts
-    search-comparison.ts
+    search-discovery.ts
   features/
     search/
     map/
@@ -54,6 +54,7 @@ src/
     settings/
   storage/
     browser-api-key.ts
+    recent-species-store.ts
     search-snapshot-store.ts
     indexeddb-search-snapshot-store.ts
   types/
@@ -85,10 +86,10 @@ Desktop entry 只打包本機 Node API、追蹤、事件、設定及 Electron br
 - 鳥種與 observation 資料正規化。
 - 搜尋條件與 request lifecycle。
 - Leaflet 地圖、marker、結果清單與目前選取項目。
-- IndexedDB 搜尋基準。
-- 新增紀錄判定、排序與標記。
+- runtime-neutral Search Snapshot store interface。
+- Search Discovery 判定、排序與標記。
 
-新增紀錄行為遵循 [手動搜尋新增紀錄計劃](./manual-search-new-observations-plan.md)。Search App 只呈現本次新增的 checklist，不比較欄位更新，也不顯示不再出現的紀錄。
+Search Discovery 行為遵循 [手動搜尋 Search Discovery 規格](./manual-search-new-observations-plan.md)。Search App 只呈現本次 discovery，不比較欄位更新，也不顯示不再出現的紀錄。
 
 共用元件不直接讀取 Desktop 或 Search App 的憑證來源。兩個 app 透過明確的 API client interface 注入請求行為。
 
@@ -104,8 +105,9 @@ Search App 包含：
 - 台灣觀察位置地圖。
 - observation 清單。
 - Checklist 與 Google Maps 連結。
-- 新增 observation badge、marker 樣式與優先排序。
+- Search Discovery 的 `新增` badge、marker 樣式與優先排序。
 - 最近一次相同條件搜尋的 IndexedDB 基準。
+- 最近成功搜尋鳥種的 browser-local 清單。
 
 Search App 不包含：
 
@@ -116,6 +118,8 @@ Search App 不包含：
 - API key 伺服器設定頁。
 - background timer、Cron 或 push notification。
 - 搜尋基準管理介面。
+- 帳號、跨裝置同步與多人資料。
+- PWA 安裝、離線搜尋與離線地圖。
 
 ### Responsive layout
 
@@ -127,31 +131,30 @@ search controls
 map                    result list
 ```
 
-窄螢幕 layout 使用垂直排列：
+手機 layout 以地圖為主要畫面，搜尋結果放在同一個 Bottom Sheet 清單。Bottom Sheet 預設佔半個畫面，可上拉至近乎全屏，也可完全收合；完全收合時，地圖側邊顯示文字按鈕 `顯示 N 筆結果`，點擊後以半屏清單重新開啟。
 
-```text
-search controls
-───────────────
-map
-───────────────
-result list
-```
+點選清單項目會選取該 observation，讓地圖自動定位至對應 Pin，並在同一個清單項目內直接顯示適合拇指操作的大型 `開啟 Checklist` 與 `Google Maps` 按鈕。Bottom Sheet 始終保留完整結果清單，不切換成獨立 detail mode。
 
-手機輸入欄位字級至少 16px，主要觸控目標至少 44px，layout 支援 safe-area inset。地圖在窄螢幕使用約 `45–55dvh` 的可視高度，結果清單由正常頁面捲動承擔，不要求第一階段提供 bottom sheet。
+每個 Pin 對應一筆 eBird submit／observation 紀錄；Pin 上的數字表示該筆紀錄的鳥隻數，不表示聚合的紀錄筆數。點選 Pin 會以半屏開啟完整結果清單，捲動到對應紀錄並將其選取，不將清單篩選成單筆結果。地圖不建立多筆紀錄聚合 Pin 或其中介狀態。
+
+手機輸入欄位字級至少 16px，主要觸控目標至少 44px，layout 支援 safe-area inset。
+
+[手機 Bottom Sheet 流程參考圖](./mockups/search-app-mobile-bottom-sheet.md) 保存資訊層級與操作動線。參考圖不是像素規格；實作可以調整色彩、字型、間距與元件細節，但必須符合本節的互動行為。
 
 ## API key lifecycle
 
-API key 的預設生命週期是目前分頁：
+Search App 在開放 taxonomy 與搜尋介面前完成 API key gate：
 
-1. 使用者輸入 key。
-2. Search App 將 key 保存在 React memory。
-3. Search App 呼叫驗證 endpoint。
-4. 驗證成功後開放搜尋。
-5. 關閉或重新載入未記憶的分頁後，key 消失。
+1. 首次使用者輸入自己的 key。
+2. Search App 呼叫驗證 endpoint。
+3. 驗證成功後將 key 保存至目前 origin 的 `localStorage`，並開放搜尋。
+4. 後續啟動讀取並重新驗證已保存的 key。
+5. eBird 回傳 401 或 403 時清除失效 key，返回 API key gate。
+6. 網路錯誤、逾時或 eBird 暫時性 server error 不清除已保存的 key。
 
-「記住這台裝置」是明確的選配。啟用時，key 保存至 `localStorage`；啟動時讀取並重新驗證。介面提供「忘記 API key」，清除 memory 與 `localStorage` 中的值。
+介面提供「忘記 API key」，只清除 key 並返回 gate；recent species 與 Search Baseline 保留。Search App 不提供只維持單一分頁的 session-only key 模式。
 
-驗證只確認 key 當下可用，不把 `localStorage` 視為安全憑證庫。安全說明必須告知使用者，網頁 JavaScript、XSS 或具有頁面權限的瀏覽器 extension 可能讀取 localStorage。
+`localStorage` 不是安全憑證庫。安全說明必須告知使用者，網頁 JavaScript、XSS 或具有頁面權限的 browser extension 可能讀取 key。這項儲存策略避免 deployment 使用一把可被所有訪客消耗的部署者 key，但使用者仍必須信任 deployment owner 與 Worker code。
 
 key 必須符合以下傳輸規則：
 
@@ -202,14 +205,17 @@ Observation response 的第一階段採保守快取策略：Worker 不保存帶�
 
 ## 瀏覽器資料
 
-Browser storage 分為兩類：
+Browser storage 分為三類：
 
 | 資料 | 儲存位置 | 行為 |
 | --- | --- | --- |
-| eBird API key | memory；選配 localStorage | 使用者主動選擇是否跨 reload 保存 |
+| eBird API key | localStorage | 驗證成功後保存；401/403 或使用者忘記 key 時清除 |
+| 最近搜尋鳥種 | localStorage | 只記錄成功完成 observation 搜尋的鳥種；依 `speciesCode` 去重並保留最近 10 筆 MRU |
 | 搜尋基準 | IndexedDB | 每個 scope 只保存最近一次 identity 集合 |
 
-搜尋基準不含 API key，也不送至 Worker。使用者清除網站資料後，Search App 對每一個 scope 的下一次搜尋會建立新的比較基準。
+鳥種搜尋欄位取得 focus 時顯示 recent species。recent species 沒有獨立管理介面；「忘記 API key」不清除它。
+
+API key、recent species 與搜尋基準都只屬於目前 browser profile 與 origin，不跨 browser 或裝置同步。搜尋基準不含 API key，也不送至 Worker。使用者清除網站資料後，Search App 對每一個 scope 的下一次搜尋會建立新的比較基準。
 
 ## 安全模型
 
@@ -224,6 +230,8 @@ HTTP response 使用 Content Security Policy 限制：
 - frame embedding 預設禁止。
 
 Worker 對 API route 採 fail-closed 行為。錯誤處理不輸出完整 upstream request、request headers 或 stack 中的憑證值。
+
+公開網址可能被掃描並消耗 Worker request quota，即使掃描者沒有可用的 eBird key。這是 personal hobby deployment 在第一階段接受的營運風險；Search App 不為此加入帳號系統、Cloudflare Access 或複雜 rate limiting。沒有自己 key 的訪客無法使用 taxonomy 與 observation 搜尋。
 
 ## Cloudflare deployment
 
@@ -266,7 +274,7 @@ Cloudflare deployment 使用 Workers Static Assets 與 Worker API 的單一專�
 
 `docs/api-key-security.md` 包含：
 
-- browser memory 與 localStorage 的差異。
+- localStorage 的持久性、同源 JavaScript 與 browser extension 暴露風險。
 - key 經過 Worker 的信任模型。
 - 只使用自己部署或可信 deployment 的要求。
 - key 不應提交至 Git、issue、screenshot 或 log。
@@ -276,10 +284,11 @@ Cloudflare deployment 使用 Workers Static Assets 與 Worker API 的單一專�
 
 ### Shared search tests
 
-- Desktop App 與 Search App 使用相同的新增紀錄 identity 與 comparison 規則。
-- 新增紀錄位於清單前方並具有文字 badge。
+- Desktop App 與 Search App 使用相同的 Search Discovery identity 與 comparison 規則。
+- Search Discovery 位於清單前方並具有文字 badge。
 - 不產生 updated 或 removed 狀態。
-- IndexedDB 儲存失敗不阻止一般搜尋。
+- snapshot 儲存失敗不阻止一般搜尋；已完成的比較依產品規格保留並顯示警告。
+- Desktop 的本機 snapshot 與 Search App 的 IndexedDB baseline 互不影響。
 
 ### Worker tests
 
@@ -295,6 +304,11 @@ Cloudflare deployment 使用 Workers Static Assets 與 Worker API 的單一專�
 - Search bundle 不包含 tracking、events、settings 或 Electron code。
 - Search production build 可由 Wrangler local preview 提供。
 - 手機與桌面 viewport 均能完成 key 驗證、搜尋、地圖選取及 checklist 跳轉。
+- 手機 Bottom Sheet 預設半屏，可展開、完全收合，並可由 `顯示 N 筆結果` 重新開啟半屏清單。
+- 點選清單項目會定位 Pin 並在該項目顯示 Checklist 與 Google Maps 按鈕。
+- 點選 Pin 會開啟完整清單、捲動並選取對應紀錄，不篩選或聚合結果。
+- 首次驗證成功會保存 key；401/403 會清除 key；網路錯誤會保留 key。
+- 成功 observation 搜尋會更新最多 10 筆的 recent species MRU；失敗搜尋不更新。
 - 真實 key 不進入 source map、build artifact 或 CI output。
 - Desktop 的 typecheck、tests、production build 與 Electron 行為維持通過。
 
@@ -302,14 +316,14 @@ Cloudflare deployment 使用 Workers Static Assets 與 Worker API 的單一專�
 
 ### 階段一：共用搜尋核心
 
-- 完成手動新增紀錄比較及 IndexedDB 儲存。
+- 完成 Search Discovery 比較、snapshot store interface 與 IndexedDB adapter。
 - 將搜尋、地圖與 tracking/event coordination 的責任分開。
 - 建立可由兩個 app 注入的 API client interface。
 
 ### 階段二：Search App shell
 
 - 建立獨立 Vite entry 與 responsive layout。
-- 建立 API key gate、memory/localStorage lifecycle。
+- 建立 API key gate、localStorage lifecycle 與 recent species MRU。
 - 只組裝搜尋、地圖與結果清單。
 
 ### 階段三：Cloudflare Worker
@@ -329,10 +343,11 @@ Cloudflare deployment 使用 Workers Static Assets 與 Worker API 的單一專�
 
 - Desktop App 與 Search App 由獨立入口建置，並共用搜尋核心。
 - Search App 可在手機與桌面瀏覽器完成完整搜尋流程。
-- 使用者 key 預設只存在 memory，並可選擇保存於 localStorage。
+- 使用者 key 在首次驗證成功後保存於 browser localStorage。
 - Worker 不持有部署者共用 key，也不保存使用者 key。
 - Worker 只能代理 allowlisted eBird operations。
 - 搜尋基準只存在瀏覽器 IndexedDB。
+- 最近成功搜尋鳥種以 browser-local MRU 保存，最多 10 筆。
 - 新增 checklist 具有明確標記並排列在結果清單前方。
 - Search App 不包含背景追蹤、通知或設定 API。
 - Cloudflare deployment 可由 repository 文件獨立完成。

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prioritizeNotificationObservation } from "../src/features/map/notification-observations.mjs";
+import {
+  notificationCanApplyToSearchResult,
+  prioritizeNotificationObservation,
+} from "../src/features/map/notification-observations.mjs";
 
 const oldReport = {
   speciesCode: "grpsni1",
@@ -49,4 +52,19 @@ test("notification moves an existing report to the front without duplicating it"
     result.map((observation) => observation.subId),
     ["S379395954", "S379420319"],
   );
+});
+
+test("only the matching notification-focus search can apply a pending notification", () => {
+  const pending = { species: { speciesCode: "grpsni1" } };
+
+  assert.equal(notificationCanApplyToSearchResult(pending, "map-1", {
+    requestId: "map-1",
+    source: "notification-focus",
+    species: { speciesCode: "grpsni1" },
+  }), true);
+  assert.equal(notificationCanApplyToSearchResult(pending, "map-1", {
+    requestId: "search-2",
+    source: "explicit",
+    species: { speciesCode: "grpsni1" },
+  }), false);
 });

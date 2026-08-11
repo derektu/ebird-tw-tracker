@@ -27,10 +27,12 @@ export function createSearchWorkflow({
   snapshots,
   now = () => new Date().toISOString(),
   createRequestId = (sequence) => `search-${sequence}`,
+  createCommitSessionId = () => `search-session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 }) {
   let sequence = 0;
   let generation = 0;
   let activeRequest;
+  const commitSessionId = createCommitSessionId();
   const cancelledRequestIds = new Set();
 
   function isCurrent(requestGeneration) {
@@ -43,7 +45,7 @@ export function createSearchWorkflow({
     activeRequest = undefined;
     if (cancelled) {
       cancelled.controller?.abort();
-      const { controller: _controller, ...cancelledRequest } = cancelled;
+      const { controller: _controller, commitToken: _commitToken, ...cancelledRequest } = cancelled;
       cancelledRequestIds.add(cancelledRequest.requestId);
       onStale?.({ requestId: cancelledRequest.requestId, source: cancelledRequest.source });
       onCancelled?.({ requestId: cancelledRequest.requestId, source: cancelledRequest.source });
@@ -56,14 +58,30 @@ export function createSearchWorkflow({
     onStale?.({ requestId, source });
   }
 
-  async function compareEligibleSearch({ requestGeneration, source, species, days, payload, request }) {
+  async function compareEligibleSearch({ requestGeneration, source, species, days, payload, request, snapshotsUnavailable }) {
     const ordinaryObservations = payload.observations;
     if (!snapshots || source === "notification-focus") return { observations: ordinaryObservations };
+    if (snapshotsUnavailable) {
+      return {
+        observations: ordinaryObservations,
+        comparison: {
+          status: "unavailable",
+          baselineAt: null,
+          discoveryIds: [],
+          observations: ordinaryObservations,
+          reason: "baseline-read-failed",
+        },
+      };
+    }
 
     const scope = createSearchScope(species.speciesCode, days);
     let baseline;
     try {
-      baseline = await snapshots.read(scope, { isCurrent: () => isCurrent(requestGeneration), signal: request.controller?.signal });
+      baseline = await snapshots.read(scope, {
+        isCurrent: () => isCurrent(requestGeneration),
+        signal: request.controller?.signal,
+        commitToken: request.commitToken,
+      });
     } catch {
       return {
         observations: ordinaryObservations,
@@ -84,6 +102,7 @@ export function createSearchWorkflow({
       const committed = await snapshots.commit(scope, snapshot, {
         isCurrent: () => isCurrent(requestGeneration),
         signal: request.controller?.signal,
+        commitToken: request.commitToken,
       });
       if (!isCurrent(requestGeneration) || committed === false) return null;
       if (!baseline) {
@@ -134,12 +153,33 @@ export function createSearchWorkflow({
     const requestState = {
       ...request,
       controller: typeof AbortController === "undefined" ? undefined : new AbortController(),
+      commitToken: { sessionId: commitSessionId, generation: requestGeneration },
     };
     activeRequest = requestState;
 
     publish({ type: "busy", busy: true, ...request });
 
     try {
+      let snapshotsUnavailable = false;
+      if (snapshots?.advance) {
+        try {
+          const advanced = await snapshots.advance({
+            isCurrent: () => isCurrent(requestGeneration),
+            signal: requestState.controller?.signal,
+            commitToken: requestState.commitToken,
+          });
+          if (!isCurrent(requestGeneration) || advanced === false) {
+            publishStale(requestId, source);
+            return { status: "stale", requestId, source };
+          }
+        } catch {
+          if (!isCurrent(requestGeneration)) {
+            publishStale(requestId, source);
+            return { status: "stale", requestId, source };
+          }
+          snapshotsUnavailable = true;
+        }
+      }
       const species = await runtime.resolveSpecies(normalizedIntent, { isCurrent: () => isCurrent(requestGeneration) });
       if (!isCurrent(requestGeneration)) {
         publishStale(requestId, source);
@@ -157,7 +197,15 @@ export function createSearchWorkflow({
         return { status: "stale", requestId, source };
       }
 
-      const compared = await compareEligibleSearch({ requestGeneration, source, species, days, payload, request: requestState });
+      const compared = await compareEligibleSearch({
+        requestGeneration,
+        source,
+        species,
+        days,
+        payload,
+        request: requestState,
+        snapshotsUnavailable,
+      });
       if (!compared || !isCurrent(requestGeneration)) {
         publishStale(requestId, source);
         return { status: "stale", requestId, source };

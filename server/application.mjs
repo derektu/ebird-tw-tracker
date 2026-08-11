@@ -31,6 +31,7 @@ export async function createApplication({
   settingsStore,
   onEvents,
   onTrackingStateChange,
+  searchSnapshotStore,
   viteHmr = true,
 } = {}) {
   const paths = {
@@ -62,7 +63,7 @@ export async function createApplication({
     onEvents,
     onStateChange: onTrackingStateChange,
   });
-  const searchSnapshots = createSearchSnapshotStore({ filePath: paths.searchSnapshots });
+  const searchSnapshots = searchSnapshotStore ?? createSearchSnapshotStore({ filePath: paths.searchSnapshots });
   const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots });
 
   let vite = null;

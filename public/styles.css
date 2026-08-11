@@ -822,34 +822,36 @@ select {
 }
 
 .bird-marker {
+  --marker-fill: var(--accent);
+  --marker-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+  --discovery-halo: 0 0 0 0 transparent;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   border: 2px solid #ffffff;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--marker-fill);
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+  box-shadow: var(--discovery-halo), var(--marker-shadow);
 }
 
 .bird-marker.private {
-  background: var(--private);
+  --marker-fill: var(--private);
 }
 
 .bird-marker.discovery {
-  box-shadow: 0 0 0 4px #f4bf4f, 0 2px 8px rgba(0, 0, 0, .28);
+  --discovery-halo: 0 0 0 4px #f4bf4f;
 }
 
 .bird-marker.active {
   width: 34px;
   height: 34px;
-  background: var(--active);
   border-width: 3px;
   transform: translate(-3px, -3px);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, .38);
+  --marker-shadow: 0 3px 12px rgba(0, 0, 0, .38);
 }
 
 .comparison {

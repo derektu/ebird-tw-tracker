@@ -4,6 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createApplication } from "../server/application.mjs";
+import { createSearchSnapshotStore } from "../server/services/search-snapshot-store.mjs";
+import { createDesktopSearchSnapshotStore } from "../src/features/search/desktop-search-snapshot-store.mjs";
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 test("local API exposes service state without returning an API key", async (context) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ebird-api-test-"));
@@ -47,12 +57,70 @@ test("local API exposes service state without returning an API key", async (cont
 
   const scope = { speciesCode: "grpsni1", days: 3, key: "grpsni1:3" };
   const snapshot = { scope, recordedAt: "2026-08-11T00:00:00.000Z", identityIds: ["grpsni1:S1"] };
+  const commitToken = { sessionId: "api-test", generation: 1 };
+  const advanceSnapshot = await fetch(`${address.url}/api/search-snapshot-sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ commitToken }),
+  });
+  assert.deepEqual(await advanceSnapshot.json(), { advanced: true });
   const saveSnapshot = await fetch(`${address.url}/api/search-snapshots`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ scope, snapshot }),
+    body: JSON.stringify({ scope, snapshot, commitToken }),
   });
-  assert.equal(saveSnapshot.status, 200);
+  assert.deepEqual(await saveSnapshot.json(), { snapshot, committed: true });
   const loadedSnapshot = await fetch(`${address.url}/api/search-snapshots?speciesCode=GRPSNI1&days=3`);
   assert.deepEqual(await loadedSnapshot.json(), { snapshot });
+});
+
+test("Desktop snapshot commits cannot let an older accepted request overwrite a newer baseline", async (context) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "ebird-snapshot-race-test-"));
+  const dataDir = path.join(root, "data");
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const oldWriteEntered = deferred();
+  const releaseOldWrite = deferred();
+  const store = createSearchSnapshotStore({
+    filePath: path.join(dataDir, "search-snapshots.json"),
+    async beforeWrite(_scope, _snapshot, token) {
+      if (token.generation === 1) {
+        oldWriteEntered.resolve();
+        await releaseOldWrite.promise;
+      }
+    },
+  });
+  const application = await createApplication({
+    root,
+    dataDir,
+    distDir: path.join(root, "dist"),
+    port: 0,
+    isProduction: true,
+    env: {},
+    logger: { error() {} },
+    searchSnapshotStore: store,
+  });
+  context.after(() => application.close());
+  const address = await application.listen();
+  const request = async (pathname, options) => {
+    const response = await fetch(`${address.url}${pathname}`, options);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error);
+    return payload;
+  };
+  const snapshots = createDesktopSearchSnapshotStore({ request });
+  const scope = { speciesCode: "grpsni1", days: 3, key: "grpsni1:3" };
+  const oldToken = { isCurrent: () => true, commitToken: { sessionId: "desktop", generation: 1 } };
+  const newToken = { isCurrent: () => true, commitToken: { sessionId: "desktop", generation: 2 } };
+  const oldSnapshot = { scope, recordedAt: "2026-08-11T00:00:00.000Z", identityIds: ["grpsni1:S1"] };
+  const newSnapshot = { scope, recordedAt: "2026-08-11T00:01:00.000Z", identityIds: ["grpsni1:S2"] };
+
+  await snapshots.advance(oldToken);
+  const oldCommit = snapshots.commit(scope, oldSnapshot, oldToken);
+  await oldWriteEntered.promise;
+  await snapshots.advance(newToken);
+  await snapshots.commit(scope, newSnapshot, newToken);
+  releaseOldWrite.resolve();
+
+  assert.equal(await oldCommit, false);
+  assert.deepEqual(await snapshots.read(scope), newSnapshot);
 });

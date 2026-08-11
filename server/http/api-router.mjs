@@ -83,15 +83,24 @@ export function createApiRouter({ settings, species, observations, tracking, sea
       jsonResponse(response, 200, { snapshot: await searchSnapshots.read(scope) });
       return;
     }
+    if (url.pathname === "/api/search-snapshot-sessions" && request.method === "POST") {
+      const body = JSON.parse(await readBody(request));
+      if (!searchSnapshots.advance(body.commitToken)) {
+        jsonResponse(response, 409, { error: "stale search snapshot session" });
+        return;
+      }
+      jsonResponse(response, 200, { advanced: true });
+      return;
+    }
     if (url.pathname === "/api/search-snapshots" && request.method === "PUT") {
       const body = JSON.parse(await readBody(request));
       const scope = createSearchScope(body.scope?.speciesCode, body.scope?.days);
-      if (!scope.speciesCode || !body.snapshot || body.snapshot.scope?.key !== scope.key) {
-        jsonResponse(response, 400, { error: "valid scope and snapshot are required" });
+      if (!scope.speciesCode || !body.snapshot || body.snapshot.scope?.key !== scope.key || !body.commitToken) {
+        jsonResponse(response, 400, { error: "valid scope, snapshot, and commit token are required" });
         return;
       }
-      await searchSnapshots.commit(scope, body.snapshot);
-      jsonResponse(response, 200, { snapshot: body.snapshot });
+      const committed = await searchSnapshots.commit(scope, body.snapshot, body.commitToken);
+      jsonResponse(response, 200, { snapshot: committed ? body.snapshot : null, committed });
       return;
     }
 

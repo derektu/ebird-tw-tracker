@@ -6,6 +6,7 @@ import type { SearchRequest, SearchResult } from "../search/types";
 import { createChecklistIdentity, createSearchScope } from "../../domain/search-discovery.mjs";
 import type { SearchComparison } from "../../domain/search-discovery.mjs";
 import type { Tracker } from "../tracking/types";
+import { createMarkerClassName } from "./marker-presentation.mjs";
 import {
   notificationCanApplyToSearchResult,
   prioritizeNotificationObservation,
@@ -29,9 +30,7 @@ function publishStatus(message: string, isError = false) {
 function createMarkerIcon(observation: Observation, active = false, discovery = false) {
   const size = active ? 34 : 28;
   const marker = document.createElement("div");
-  marker.className = ["bird-marker", observation.locationPrivate ? "private" : "", discovery ? "discovery" : "", active ? "active" : ""]
-    .filter(Boolean)
-    .join(" ");
+  marker.className = createMarkerClassName({ locationPrivate: observation.locationPrivate, discovery, active });
   marker.textContent = observation.howMany == null ? "?" : String(observation.howMany);
   return L.divIcon({
     className: "",

@@ -45,6 +45,7 @@ export interface SearchResult {
 }
 
 export interface SearchSnapshotStore {
+  advance?(token: SearchSnapshotToken): Promise<void | false>;
   read(scope: SearchScope, token?: SearchSnapshotToken): Promise<SearchSnapshot | null>;
   commit(scope: SearchScope, snapshot: SearchSnapshot, token?: SearchSnapshotToken): Promise<void | false>;
 }
@@ -52,6 +53,10 @@ export interface SearchSnapshotStore {
 export interface SearchSnapshotToken {
   isCurrent(): boolean;
   signal?: AbortSignal;
+  commitToken: {
+    sessionId: string;
+    generation: number;
+  };
 }
 
 export interface SearchObservationRequest {

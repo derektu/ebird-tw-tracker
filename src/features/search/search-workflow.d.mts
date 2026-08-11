@@ -26,6 +26,7 @@ export function createSearchWorkflow(options: {
   snapshots?: SearchSnapshotStore;
   now?: () => string;
   createRequestId?: (sequence: number) => string;
+  createCommitSessionId?: () => string;
 }): SearchWorkflow;
 
 export function normalizeDays(days: number): number;

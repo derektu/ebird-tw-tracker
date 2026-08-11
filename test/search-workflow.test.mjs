@@ -581,3 +581,35 @@ test("a stale snapshot commit is cancelled before it can replace the baseline", 
   assert.equal((await latest).status, "completed");
   assert.deepEqual(writes, []);
 });
+
+test("an unavailable snapshot session still publishes ordinary search results", async () => {
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations() {
+        return { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S1" }] };
+      },
+    },
+    snapshots: {
+      async advance() {
+        throw new Error("snapshot session unavailable");
+      },
+      async read() {
+        throw new Error("must not read");
+      },
+      async commit() {
+        throw new Error("must not write");
+      },
+    },
+    publish() {},
+  });
+
+  const outcome = await workflow.run({ source: "explicit", species, days: 3 });
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(outcome.result.comparison.status, "unavailable");
+  assert.equal(outcome.result.comparison.reason, "baseline-read-failed");
+  assert.deepEqual(outcome.result.observations.map((item) => item.subId), ["S1"]);
+});

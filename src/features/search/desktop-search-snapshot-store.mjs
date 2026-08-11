@@ -5,6 +5,15 @@
  */
 export function createDesktopSearchSnapshotStore({ request }) {
   return {
+    async advance(token) {
+      if (!token.isCurrent()) return false;
+      await request("/api/search-snapshot-sessions", {
+        method: "POST",
+        body: JSON.stringify({ commitToken: token.commitToken }),
+        signal: token.signal,
+      });
+      return token.isCurrent() ? undefined : false;
+    },
     async read(scope, token) {
       const result = await request(
         `/api/search-snapshots?speciesCode=${encodeURIComponent(scope.speciesCode)}&days=${scope.days}`,
@@ -14,12 +23,12 @@ export function createDesktopSearchSnapshotStore({ request }) {
     },
     async commit(scope, snapshot, token) {
       if (token && !token.isCurrent()) return false;
-      await request("/api/search-snapshots", {
+      const result = await request("/api/search-snapshots", {
         method: "PUT",
-        body: JSON.stringify({ scope, snapshot }),
+        body: JSON.stringify({ scope, snapshot, commitToken: token?.commitToken }),
         signal: token?.signal,
       });
-      return token && !token.isCurrent() ? false : undefined;
+      return result.committed === false || (token && !token.isCurrent()) ? false : undefined;
     },
   };
 }

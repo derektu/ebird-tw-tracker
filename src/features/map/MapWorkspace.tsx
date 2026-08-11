@@ -237,6 +237,7 @@ export function MapWorkspace() {
           }
           return;
         }
+        window.dispatchEvent(new Event("search:invalidate"));
         pendingNotificationRef.current = selected;
         pendingNotificationRequestRef.current = null;
         const nextObservations = prioritizeNotificationObservation(

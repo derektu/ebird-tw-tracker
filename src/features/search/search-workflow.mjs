@@ -30,6 +30,10 @@ export function createSearchWorkflow({
     return requestGeneration === generation;
   }
 
+  function invalidate() {
+    generation += 1;
+  }
+
   async function run(intent) {
     const requestGeneration = ++generation;
     const requestId = intent.requestId ?? createRequestId(++sequence);
@@ -85,7 +89,7 @@ export function createSearchWorkflow({
     }
   }
 
-  return { run };
+  return { run, invalidate };
 }
 
 export { normalizeDays };

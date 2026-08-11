@@ -9,6 +9,7 @@ export type SearchWorkflowOutcome =
 
 export interface SearchWorkflow {
   run(intent: SearchIntent): Promise<SearchWorkflowOutcome>;
+  invalidate(): void;
 }
 
 export function createSearchWorkflow(options: {

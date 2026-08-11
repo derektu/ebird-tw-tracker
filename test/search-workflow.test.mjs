@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createDesktopSearchRuntime } from "../src/features/search/desktop-search-runtime.mjs";
 import { createSearchWorkflow } from "../src/features/search/search-workflow.mjs";
 
 const species = {
@@ -14,6 +15,16 @@ const payload = {
   generatedAt: "2026-08-11T00:00:00.000Z",
   observations: [],
 };
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 test("search workflow normalizes the intent and publishes a complete lifecycle", async () => {
   const calls = [];
@@ -217,4 +228,105 @@ test("a stale failure cannot publish while the newest request publishes its resu
       days: 30,
     }],
   );
+});
+
+test("startup resolution is stale when a newer explicit search completes first", async () => {
+  const startupSavedSpecies = deferred();
+  const events = [];
+  let savedSpeciesReads = 0;
+  const explicitSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: createDesktopSearchRuntime({
+      loadSavedSpecies() {
+        savedSpeciesReads += 1;
+        return savedSpeciesReads === 1 ? startupSavedSpecies.promise : Promise.resolve([explicitSpecies]);
+      },
+      async resolveSpecies(query) {
+        assert.equal(query, "小白鷺");
+        return explicitSpecies;
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+    }),
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const startup = workflow.run({ source: "startup", days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const explicit = await workflow.run({ source: "explicit", query: "小白鷺", days: 3 });
+  startupSavedSpecies.resolve([species]);
+
+  assert.equal(explicit.status, "completed");
+  assert.deepEqual(await startup, { status: "stale", requestId: "search-1", source: "startup" });
+  assert.deepEqual(
+    events.filter((event) => event.type === "completed" || event.type === "failed"),
+    [{ type: "completed", result: explicit.result }],
+  );
+  assert.deepEqual(
+    events.filter((event) => event.type === "busy" && !event.busy),
+    [{
+      type: "busy",
+      busy: false,
+      requestId: "search-2",
+      source: "explicit",
+      query: "小白鷺",
+      species: explicitSpecies,
+      days: 3,
+    }],
+  );
+});
+
+test("a typed explicit search refreshes saved species before publishing its result", async () => {
+  const savedSpecies = [];
+  const resolvedSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: createDesktopSearchRuntime({
+      async loadSavedSpecies() {
+        savedSpecies.push("refreshed");
+        return [resolvedSpecies];
+      },
+      async resolveSpecies() {
+        return resolvedSpecies;
+      },
+      async fetchObservations(request) {
+        assert.deepEqual(savedSpecies, ["refreshed"]);
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+    }),
+    publish() {},
+  });
+
+  const outcome = await workflow.run({ source: "explicit", query: "小白鷺", days: 3 });
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(savedSpecies, ["refreshed"]);
+});
+
+test("an explicit invalidation prevents an in-flight notification search from publishing", async () => {
+  const request = deferred();
+  const events = [];
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      fetchObservations() {
+        return request.promise;
+      },
+    },
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const notification = workflow.run({ source: "notification-focus", species, days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  workflow.invalidate();
+  request.resolve(payload);
+
+  assert.deepEqual(await notification, { status: "stale", requestId: "search-1", source: "notification-focus" });
+  assert.deepEqual(events.map((event) => event.type), ["busy"]);
 });

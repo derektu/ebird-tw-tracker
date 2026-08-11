@@ -1,12 +1,12 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Species } from "../../types/domain";
+import { createDesktopSearchRuntime } from "./desktop-search-runtime.mjs";
 import { createSearchWorkflow } from "./search-workflow.mjs";
 import type {
   ObservationsResponse,
   SearchRequest,
   SearchObservationRequest,
-  SearchIntent,
   SearchWorkflowEvent,
   SpeciesResolveResponse,
   SpeciesSearchResponse,
@@ -24,6 +24,7 @@ export function SearchToolbar() {
   const [suggestions, setSuggestions] = useState<Species[]>([]);
   const [busy, setBusy] = useState(false);
   const fieldRef = useRef<HTMLLabelElement>(null);
+  const runtimeRef = useRef<ReturnType<typeof createDesktopSearchRuntime> | null>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
 
   const loadSavedSpecies = useCallback(async () => {
@@ -32,17 +33,13 @@ export function SearchToolbar() {
     return saved;
   }, []);
 
-  if (!workflowRef.current) {
-    workflowRef.current = createSearchWorkflow({
-      runtime: {
-        async resolveSpecies(intent: SearchIntent & { source: "startup" | "explicit" | "notification-focus"; days: number }) {
-          if (intent.species) return intent.species;
-          const normalizedQuery = intent.query?.trim() ?? "";
-          if (!normalizedQuery) throw new Error("請輸入鳥種名稱或 species code");
+  if (!runtimeRef.current) {
+    runtimeRef.current = createDesktopSearchRuntime({
+        loadSavedSpecies,
+        async resolveSpecies(query) {
           const payload = await fetchJson<SpeciesResolveResponse>(
-            `/api/species/resolve?q=${encodeURIComponent(normalizedQuery)}`,
+            `/api/species/resolve?q=${encodeURIComponent(query)}`,
           );
-          if (!payload.species) throw new Error(`找不到 eBird 鳥種：${normalizedQuery}`);
           return payload.species;
         },
         fetchObservations({ species, days }: SearchObservationRequest) {
@@ -50,7 +47,16 @@ export function SearchToolbar() {
             `/api/observations?speciesCode=${encodeURIComponent(species.speciesCode)}&days=${days}`,
           );
         },
-      },
+        rememberStartupSpecies(species) {
+          setSavedSpecies([species]);
+        },
+      });
+  }
+  const runtime = runtimeRef.current;
+
+  if (!workflowRef.current) {
+    workflowRef.current = createSearchWorkflow({
+      runtime,
       publish(event: SearchWorkflowEvent) {
         if (event.type === "busy") {
           setBusy(event.busy);
@@ -100,35 +106,22 @@ export function SearchToolbar() {
     ) {
       return selectedSpecies;
     }
-    const payload = await fetchJson<SpeciesResolveResponse>(`/api/species/resolve?q=${encodeURIComponent(normalizedQuery)}`);
-    if (!payload.species) throw new Error(`找不到 eBird 鳥種：${normalizedQuery}`);
-    setSelectedSpecies(payload.species);
-    setQuery(payload.species.comName);
-    await loadSavedSpecies();
-    return payload.species;
-  }, [loadSavedSpecies, query, selectedSpecies]);
+    const species = await runtime.resolveSpecies({ source: "explicit", query: normalizedQuery, days });
+    setSelectedSpecies(species);
+    setQuery(species.comName);
+    return species;
+  }, [days, query, runtime, selectedSpecies]);
 
   useEffect(() => {
     const initialize = async () => {
       try {
-        const saved = await loadSavedSpecies();
-        let initial: Species | undefined = saved.find((species) => species.comName === "彩鷸") ?? saved.at(0);
-        if (!initial) {
-          const resolved = await fetchJson<SpeciesResolveResponse>("/api/species/resolve?q=%E5%BD%A9%E9%B7%B8");
-          initial = resolved.species ?? undefined;
-          if (initial) setSavedSpecies([initial]);
-        }
-        if (initial) {
-          await workflow.run({ source: "startup", species: initial, days: 3 });
-        } else {
-          publishStatus("請先輸入鳥種");
-        }
+        await workflow.run({ source: "startup", days: 3 });
       } catch (error) {
         publishStatus(error instanceof Error ? error.message : "初始資料讀取失敗", true);
       }
     };
     void initialize();
-  }, [loadSavedSpecies, workflow]);
+  }, [workflow]);
 
   useEffect(() => {
     const handleRequest = (event: Event) => {
@@ -137,6 +130,12 @@ export function SearchToolbar() {
     };
     window.addEventListener("search:request", handleRequest);
     return () => window.removeEventListener("search:request", handleRequest);
+  }, [workflow]);
+
+  useEffect(() => {
+    const invalidate = () => workflow.invalidate();
+    window.addEventListener("search:invalidate", invalidate);
+    return () => window.removeEventListener("search:invalidate", invalidate);
   }, [workflow]);
 
   useEffect(() => {

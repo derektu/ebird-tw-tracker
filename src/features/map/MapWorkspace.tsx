@@ -4,7 +4,11 @@ import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
 import type { SearchRequest, SearchResult } from "../search/types";
 import type { Tracker } from "../tracking/types";
-import { prioritizeNotificationObservation } from "./notification-observations.mjs";
+import {
+  notificationCanApplyToSearchResult,
+  prioritizeNotificationObservation,
+  selectCurrentNotification,
+} from "./notification-observations.mjs";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
@@ -87,7 +91,7 @@ function createPopup(observation: Observation) {
 }
 
 function requestSpeciesSearch(species: Species, days: number, requestId: string) {
-  return new Promise<SearchResult>((resolve, reject) => {
+  return new Promise<"completed" | "stale">((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error("鳥種搜尋逾時"));
@@ -96,7 +100,7 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
       const result = (event as CustomEvent<SearchResult>).detail;
       if (result.requestId !== requestId) return;
       cleanup();
-      resolve(result);
+      resolve("completed");
     };
     const failed = (event: Event) => {
       const detail = (event as CustomEvent<{ requestId: string; message: string }>).detail;
@@ -104,14 +108,22 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
       cleanup();
       reject(new Error(detail.message));
     };
+    const stale = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestId: string }>).detail;
+      if (detail.requestId !== requestId) return;
+      cleanup();
+      resolve("stale");
+    };
     const cleanup = () => {
       window.clearTimeout(timeout);
       window.removeEventListener("search:completed", completed);
       window.removeEventListener("search:failed", failed);
+      window.removeEventListener("search:stale", stale);
     };
     window.addEventListener("search:completed", completed);
     window.addEventListener("search:failed", failed);
-    const request: SearchRequest = { requestId, species, days };
+    window.addEventListener("search:stale", stale);
+    const request: SearchRequest = { requestId, source: "notification-focus", species, days };
     window.dispatchEvent(new CustomEvent("search:request", { detail: request }));
   });
 }
@@ -127,6 +139,7 @@ export function MapWorkspace() {
   const trackersRef = useRef<Tracker[]>([]);
   const observerCacheRef = useRef(new Map<string, Promise<string | null>>());
   const pendingNotificationRef = useRef<ObservationEvent | null>(null);
+  const pendingNotificationRequestRef = useRef<string | null>(null);
   const requestSequence = useRef(0);
   const [species, setSpecies] = useState<Species | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -186,8 +199,14 @@ export function MapWorkspace() {
     const handleResults = (event: Event) => {
       const result = (event as CustomEvent<SearchResult>).detail;
       const pending = pendingNotificationRef.current;
+      const pendingRequestId = pendingNotificationRequestRef.current;
+      const canApplyNotification = notificationCanApplyToSearchResult(pending, pendingRequestId, result);
+      if (pending && !canApplyNotification) {
+        pendingNotificationRef.current = null;
+        pendingNotificationRequestRef.current = null;
+      }
       const nextObservations =
-        pending?.species.speciesCode === result.species.speciesCode
+        pending && canApplyNotification
           ? prioritizeNotificationObservation(result.payload.observations, pending.observation)
           : result.payload.observations;
       speciesRef.current = result.species;
@@ -202,6 +221,7 @@ export function MapWorkspace() {
     };
     const handleNotification = async (event: Event) => {
       const selected = (event as CustomEvent<ObservationEvent>).detail;
+      let pendingRequestId: string | null = null;
       try {
         if (speciesRef.current?.speciesCode !== selected.species.speciesCode) {
           pendingNotificationRef.current = selected;
@@ -209,19 +229,30 @@ export function MapWorkspace() {
             (candidate) => candidate.species.speciesCode === selected.species.speciesCode,
           );
           const requestId = `map-${++requestSequence.current}`;
-          await requestSpeciesSearch(selected.species, tracker?.days ?? searchDaysRef.current, requestId);
+          pendingRequestId = requestId;
+          pendingNotificationRequestRef.current = requestId;
+          const outcome = await requestSpeciesSearch(selected.species, tracker?.days ?? searchDaysRef.current, requestId);
+          if (outcome === "stale" && pendingNotificationRequestRef.current === requestId) {
+            pendingNotificationRef.current = null;
+            pendingNotificationRequestRef.current = null;
+          }
           return;
         }
         pendingNotificationRef.current = selected;
-        const nextObservations = prioritizeNotificationObservation(
+        pendingNotificationRequestRef.current = null;
+        const nextObservations = selectCurrentNotification(
           observationsRef.current,
           selected.observation,
+          () => window.dispatchEvent(new Event("search:invalidate")),
         );
         observationsRef.current = nextObservations;
         setObservations(nextObservations);
         setActiveIndex(0);
       } catch (error) {
-        pendingNotificationRef.current = null;
+        if (!pendingRequestId || pendingNotificationRequestRef.current === pendingRequestId) {
+          pendingNotificationRef.current = null;
+          pendingNotificationRequestRef.current = null;
+        }
         publishStatus(error instanceof Error ? error.message : "通知定位失敗", true);
       }
     };
@@ -260,6 +291,7 @@ export function MapWorkspace() {
     const pending = pendingNotificationRef.current;
     if (pending) {
       pendingNotificationRef.current = null;
+      pendingNotificationRequestRef.current = null;
       const index = observations.findIndex(
         (observation) =>
           observation.subId === pending.observation.subId && observation.obsDt === pending.observation.obsDt,

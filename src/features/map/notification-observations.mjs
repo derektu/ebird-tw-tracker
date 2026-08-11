@@ -10,3 +10,17 @@ export function prioritizeNotificationObservation(observations, selected) {
     ),
   ];
 }
+
+export function notificationCanApplyToSearchResult(pending, pendingRequestId, result) {
+  return Boolean(
+    pending &&
+      result.source === "notification-focus" &&
+      pending.species.speciesCode === result.species.speciesCode &&
+      (!pendingRequestId || pendingRequestId === result.requestId),
+  );
+}
+
+export function selectCurrentNotification(observations, selected, invalidateSearch) {
+  invalidateSearch();
+  return prioritizeNotificationObservation(observations, selected);
+}

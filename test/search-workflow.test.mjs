@@ -233,13 +233,17 @@ test("a stale failure cannot publish while the newest request publishes its resu
 test("startup resolution is stale when a newer explicit search completes first", async () => {
   const startupSavedSpecies = deferred();
   const events = [];
+  let visibleSavedSpecies = [];
   let savedSpeciesReads = 0;
   const explicitSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
   const workflow = createSearchWorkflow({
     runtime: createDesktopSearchRuntime({
-      loadSavedSpecies() {
+      fetchSavedSpecies() {
         savedSpeciesReads += 1;
         return savedSpeciesReads === 1 ? startupSavedSpecies.promise : Promise.resolve([explicitSpecies]);
+      },
+      publishSavedSpecies(species) {
+        visibleSavedSpecies = species;
       },
       async resolveSpecies(query) {
         assert.equal(query, "小白鷺");
@@ -261,6 +265,7 @@ test("startup resolution is stale when a newer explicit search completes first",
 
   assert.equal(explicit.status, "completed");
   assert.deepEqual(await startup, { status: "stale", requestId: "search-1", source: "startup" });
+  assert.deepEqual(visibleSavedSpecies, [explicitSpecies]);
   assert.deepEqual(
     events.filter((event) => event.type === "completed" || event.type === "failed"),
     [{ type: "completed", result: explicit.result }],
@@ -281,18 +286,23 @@ test("startup resolution is stale when a newer explicit search completes first",
 
 test("a typed explicit search refreshes saved species before publishing its result", async () => {
   const savedSpecies = [];
+  let visibleSavedSpecies = [];
   const resolvedSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
   const workflow = createSearchWorkflow({
     runtime: createDesktopSearchRuntime({
-      async loadSavedSpecies() {
+      async fetchSavedSpecies() {
         savedSpecies.push("refreshed");
         return [resolvedSpecies];
+      },
+      publishSavedSpecies(species) {
+        visibleSavedSpecies = species;
       },
       async resolveSpecies() {
         return resolvedSpecies;
       },
       async fetchObservations(request) {
         assert.deepEqual(savedSpecies, ["refreshed"]);
+        assert.deepEqual(visibleSavedSpecies, [resolvedSpecies]);
         return { ...payload, speciesCode: request.species.speciesCode };
       },
     }),
@@ -303,11 +313,58 @@ test("a typed explicit search refreshes saved species before publishing its resu
 
   assert.equal(outcome.status, "completed");
   assert.deepEqual(savedSpecies, ["refreshed"]);
+  assert.deepEqual(visibleSavedSpecies, [resolvedSpecies]);
+});
+
+test("a stale startup fallback cannot remember its default species", async () => {
+  const startupFallback = deferred();
+  const events = [];
+  const rememberedStartupSpecies = [];
+  let visibleSavedSpecies = [];
+  const explicitSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  let savedSpeciesReads = 0;
+  const workflow = createSearchWorkflow({
+    runtime: createDesktopSearchRuntime({
+      fetchSavedSpecies() {
+        savedSpeciesReads += 1;
+        return Promise.resolve(savedSpeciesReads === 1 ? [] : [explicitSpecies]);
+      },
+      publishSavedSpecies(species) {
+        visibleSavedSpecies = species;
+      },
+      resolveSpecies(query) {
+        if (query === "彩鷸") return startupFallback.promise;
+        return Promise.resolve(explicitSpecies);
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+      rememberStartupSpecies(species) {
+        rememberedStartupSpecies.push(species);
+      },
+    }),
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const startup = workflow.run({ source: "startup", days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const explicit = await workflow.run({ source: "explicit", query: "小白鷺", days: 3 });
+  startupFallback.resolve(species);
+
+  assert.equal(explicit.status, "completed");
+  assert.deepEqual(await startup, { status: "stale", requestId: "search-1", source: "startup" });
+  assert.deepEqual(rememberedStartupSpecies, []);
+  assert.deepEqual(visibleSavedSpecies, [explicitSpecies]);
+  assert.equal(events.filter((event) => event.type === "completed").length, 1);
 });
 
 test("an explicit invalidation prevents an in-flight notification search from publishing", async () => {
   const request = deferred();
   const events = [];
+  const cancellations = [];
+  const staleRequests = [];
   const workflow = createSearchWorkflow({
     runtime: {
       async resolveSpecies(intent) {
@@ -320,6 +377,12 @@ test("an explicit invalidation prevents an in-flight notification search from pu
     publish(event) {
       events.push(event);
     },
+    onCancelled(request) {
+      cancellations.push(request);
+    },
+    onStale(request) {
+      staleRequests.push(request);
+    },
   });
 
   const notification = workflow.run({ source: "notification-focus", species, days: 3 });
@@ -328,5 +391,8 @@ test("an explicit invalidation prevents an in-flight notification search from pu
   request.resolve(payload);
 
   assert.deepEqual(await notification, { status: "stale", requestId: "search-1", source: "notification-focus" });
-  assert.deepEqual(events.map((event) => event.type), ["busy"]);
+  assert.deepEqual(events.map((event) => event.type), ["busy", "busy"]);
+  assert.equal(events[1].busy, false);
+  assert.deepEqual(cancellations, [{ requestId: "search-1", source: "notification-focus" }]);
+  assert.deepEqual(staleRequests, [{ requestId: "search-1", source: "notification-focus" }]);
 });

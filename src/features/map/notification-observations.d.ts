@@ -11,3 +11,9 @@ export function notificationCanApplyToSearchResult(
   pendingRequestId: string | null,
   result: SearchResult,
 ): boolean;
+
+export function selectCurrentNotification(
+  observations: Observation[],
+  selected: Observation,
+  invalidateSearch: () => void,
+): Observation[];

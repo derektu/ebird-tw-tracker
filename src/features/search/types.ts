@@ -49,7 +49,10 @@ export interface SearchObservationRequest {
 }
 
 export interface SearchRuntime {
-  resolveSpecies(intent: SearchIntent & { source: SearchSource; days: number }): Promise<Species>;
+  resolveSpecies(
+    intent: SearchIntent & { source: SearchSource; days: number },
+    lifecycle: { isCurrent(): boolean },
+  ): Promise<Species>;
   fetchObservations(request: SearchObservationRequest): Promise<ObservationsResponse>;
 }
 

@@ -27,15 +27,14 @@ export function SearchToolbar() {
   const runtimeRef = useRef<ReturnType<typeof createDesktopSearchRuntime> | null>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
 
-  const loadSavedSpecies = useCallback(async () => {
-    const saved = await fetchJson<Species[]>("/api/species/saved");
-    setSavedSpecies(saved);
-    return saved;
-  }, []);
+  const fetchSavedSpecies = useCallback(() => fetchJson<Species[]>("/api/species/saved"), []);
 
   if (!runtimeRef.current) {
     runtimeRef.current = createDesktopSearchRuntime({
-        loadSavedSpecies,
+        fetchSavedSpecies,
+        publishSavedSpecies(species) {
+          setSavedSpecies(species);
+        },
         async resolveSpecies(query) {
           const payload = await fetchJson<SpeciesResolveResponse>(
             `/api/species/resolve?q=${encodeURIComponent(query)}`,
@@ -93,6 +92,9 @@ export function SearchToolbar() {
       onStale(request: { requestId: string; source: "startup" | "explicit" | "notification-focus" }) {
         window.dispatchEvent(new CustomEvent("search:stale", { detail: request }));
       },
+      onCancelled() {
+        publishStatus("準備查詢");
+      },
     });
   }
   const workflow = workflowRef.current;
@@ -106,7 +108,10 @@ export function SearchToolbar() {
     ) {
       return selectedSpecies;
     }
-    const species = await runtime.resolveSpecies({ source: "explicit", query: normalizedQuery, days });
+    const species = await runtime.resolveSpecies(
+      { source: "explicit", query: normalizedQuery, days },
+      { isCurrent: () => true },
+    );
     setSelectedSpecies(species);
     setQuery(species.comName);
     return species;

@@ -19,6 +19,10 @@ export function createSearchWorkflow(options: {
     requestId: string;
     source: import("./types").SearchSource;
   }) => void;
+  onCancelled?: (request: {
+    requestId: string;
+    source: import("./types").SearchSource;
+  }) => void;
   createRequestId?: (sequence: number) => string;
 }): SearchWorkflow;
 

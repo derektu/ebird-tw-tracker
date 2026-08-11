@@ -7,6 +7,7 @@ import type { Tracker } from "../tracking/types";
 import {
   notificationCanApplyToSearchResult,
   prioritizeNotificationObservation,
+  selectCurrentNotification,
 } from "./notification-observations.mjs";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
@@ -237,12 +238,12 @@ export function MapWorkspace() {
           }
           return;
         }
-        window.dispatchEvent(new Event("search:invalidate"));
         pendingNotificationRef.current = selected;
         pendingNotificationRequestRef.current = null;
-        const nextObservations = prioritizeNotificationObservation(
+        const nextObservations = selectCurrentNotification(
           observationsRef.current,
           selected.observation,
+          () => window.dispatchEvent(new Event("search:invalidate")),
         );
         observationsRef.current = nextObservations;
         setObservations(nextObservations);

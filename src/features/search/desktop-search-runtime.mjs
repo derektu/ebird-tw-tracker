@@ -6,23 +6,25 @@ const DEFAULT_STARTUP_QUERY = "彩鷸";
  * generation before any saved-species or default-species request begins.
  */
 export function createDesktopSearchRuntime({
-  loadSavedSpecies,
+  fetchSavedSpecies,
+  publishSavedSpecies,
   resolveSpecies,
   fetchObservations,
   rememberStartupSpecies,
 }) {
   return {
-    async resolveSpecies(intent) {
+    async resolveSpecies(intent, lifecycle) {
       if (intent.species) return intent.species;
 
       if (intent.source === "startup") {
-        const saved = await loadSavedSpecies();
+        const saved = await fetchSavedSpecies();
+        if (lifecycle.isCurrent()) publishSavedSpecies(saved);
         const initial = saved.find((species) => species.comName === DEFAULT_STARTUP_QUERY) ?? saved.at(0);
         if (initial) return initial;
 
         const resolved = await resolveSpecies(DEFAULT_STARTUP_QUERY);
         if (!resolved) throw new Error("請先輸入鳥種");
-        rememberStartupSpecies?.(resolved);
+        if (lifecycle.isCurrent()) rememberStartupSpecies?.(resolved);
         return resolved;
       }
 
@@ -30,7 +32,8 @@ export function createDesktopSearchRuntime({
       if (!query) throw new Error("請輸入鳥種名稱或 species code");
       const resolved = await resolveSpecies(query);
       if (!resolved) throw new Error(`找不到 eBird 鳥種：${query}`);
-      await loadSavedSpecies();
+      const saved = await fetchSavedSpecies();
+      if (lifecycle.isCurrent()) publishSavedSpecies(saved);
       return resolved;
     },
     fetchObservations,

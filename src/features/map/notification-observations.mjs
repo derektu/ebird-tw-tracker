@@ -19,3 +19,8 @@ export function notificationCanApplyToSearchResult(pending, pendingRequestId, re
       (!pendingRequestId || pendingRequestId === result.requestId),
   );
 }
+
+export function selectCurrentNotification(observations, selected, invalidateSearch) {
+  invalidateSearch();
+  return prioritizeNotificationObservation(observations, selected);
+}

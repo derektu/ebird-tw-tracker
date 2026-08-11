@@ -111,7 +111,7 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
     };
     window.addEventListener("search:completed", completed);
     window.addEventListener("search:failed", failed);
-    const request: SearchRequest = { requestId, species, days };
+    const request: SearchRequest = { requestId, source: "notification-focus", species, days };
     window.dispatchEvent(new CustomEvent("search:request", { detail: request }));
   });
 }

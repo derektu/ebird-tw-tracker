@@ -1,10 +1,13 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Species } from "../../types/domain";
+import { createSearchWorkflow } from "./search-workflow.mjs";
 import type {
   ObservationsResponse,
   SearchRequest,
-  SearchResult,
+  SearchObservationRequest,
+  SearchIntent,
+  SearchWorkflowEvent,
   SpeciesResolveResponse,
   SpeciesSearchResponse,
 } from "./types";
@@ -21,9 +24,7 @@ export function SearchToolbar() {
   const [suggestions, setSuggestions] = useState<Species[]>([]);
   const [busy, setBusy] = useState(false);
   const fieldRef = useRef<HTMLLabelElement>(null);
-  const requestSequence = useRef(0);
-
-  const nextRequestId = useCallback(() => `search-${++requestSequence.current}`, []);
+  const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
 
   const loadSavedSpecies = useCallback(async () => {
     const saved = await fetchJson<Species[]>("/api/species/saved");
@@ -31,30 +32,61 @@ export function SearchToolbar() {
     return saved;
   }, []);
 
-  const performSearch = useCallback(async (species: Species, requestedDays: number, requestId = nextRequestId()) => {
-    const normalizedDays = Math.max(1, Math.min(requestedDays, 30));
-    setBusy(true);
-    setSelectedSpecies(species);
-    setQuery(species.comName);
-    setDays(normalizedDays);
-    setSuggestions([]);
-    publishStatus(`查詢 ${species.comName} / 最近 ${normalizedDays} 天...`);
-    try {
-      const payload = await fetchJson<ObservationsResponse>(
-        `/api/observations?speciesCode=${encodeURIComponent(species.speciesCode)}&days=${normalizedDays}`,
-      );
-      const result: SearchResult = { requestId, species, days: normalizedDays, payload };
-      window.dispatchEvent(new CustomEvent("search:results", { detail: result }));
-      window.dispatchEvent(new CustomEvent("search:completed", { detail: result }));
-      publishStatus(`${species.comName} 最近 ${normalizedDays} 天：${payload.observations.length} 筆有座標紀錄`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "鳥種查詢失敗";
-      window.dispatchEvent(new CustomEvent("search:failed", { detail: { requestId, message } }));
-      publishStatus(message, true);
-    } finally {
-      setBusy(false);
-    }
-  }, [nextRequestId]);
+  if (!workflowRef.current) {
+    workflowRef.current = createSearchWorkflow({
+      runtime: {
+        async resolveSpecies(intent: SearchIntent & { source: "startup" | "explicit" | "notification-focus"; days: number }) {
+          if (intent.species) return intent.species;
+          const normalizedQuery = intent.query?.trim() ?? "";
+          if (!normalizedQuery) throw new Error("請輸入鳥種名稱或 species code");
+          const payload = await fetchJson<SpeciesResolveResponse>(
+            `/api/species/resolve?q=${encodeURIComponent(normalizedQuery)}`,
+          );
+          if (!payload.species) throw new Error(`找不到 eBird 鳥種：${normalizedQuery}`);
+          return payload.species;
+        },
+        fetchObservations({ species, days }: SearchObservationRequest) {
+          return fetchJson<ObservationsResponse>(
+            `/api/observations?speciesCode=${encodeURIComponent(species.speciesCode)}&days=${days}`,
+          );
+        },
+      },
+      publish(event: SearchWorkflowEvent) {
+        if (event.type === "busy") {
+          setBusy(event.busy);
+          if (!event.busy) return;
+          setDays(event.days);
+          setSuggestions([]);
+          if (event.species) {
+            setSelectedSpecies(event.species);
+            setQuery(event.species.comName);
+            publishStatus(`查詢 ${event.species.comName} / 最近 ${event.days} 天...`);
+          } else {
+            publishStatus("搜尋中...");
+          }
+          return;
+        }
+
+        if (event.type === "completed") {
+          const { result } = event;
+          setSelectedSpecies(result.species);
+          setQuery(result.species.comName);
+          setDays(result.days);
+          setSuggestions([]);
+          window.dispatchEvent(new CustomEvent("search:results", { detail: result }));
+          window.dispatchEvent(new CustomEvent("search:completed", { detail: result }));
+          publishStatus(
+            `${result.species.comName} 最近 ${result.days} 天：${result.payload.observations.length} 筆有座標紀錄`,
+          );
+          return;
+        }
+
+        window.dispatchEvent(new CustomEvent("search:failed", { detail: event.error }));
+        publishStatus(event.error.message, true);
+      },
+    });
+  }
+  const workflow = workflowRef.current;
 
   const resolveCurrentSpecies = useCallback(async () => {
     const normalizedQuery = query.trim();
@@ -84,7 +116,7 @@ export function SearchToolbar() {
           if (initial) setSavedSpecies([initial]);
         }
         if (initial) {
-          await performSearch(initial, 3);
+          await workflow.run({ source: "startup", species: initial, days: 3 });
         } else {
           publishStatus("請先輸入鳥種");
         }
@@ -93,16 +125,16 @@ export function SearchToolbar() {
       }
     };
     void initialize();
-  }, [loadSavedSpecies, performSearch]);
+  }, [loadSavedSpecies, workflow]);
 
   useEffect(() => {
     const handleRequest = (event: Event) => {
       const request = (event as CustomEvent<SearchRequest>).detail;
-      void performSearch(request.species, request.days, request.requestId);
+      void workflow.run(request);
     };
     window.addEventListener("search:request", handleRequest);
     return () => window.removeEventListener("search:request", handleRequest);
-  }, [performSearch]);
+  }, [workflow]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -138,14 +170,14 @@ export function SearchToolbar() {
     publishStatus(`已辨識 ${species.comName} / ${species.speciesCode}`);
   }
 
-  async function submitSearch(event: FormEvent<HTMLFormElement>) {
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    try {
-      const species = await resolveCurrentSpecies();
-      await performSearch(species, days);
-    } catch (error) {
-      publishStatus(error instanceof Error ? error.message : "鳥種查詢失敗", true);
-    }
+    const normalizedQuery = query.trim();
+    const species = selectedSpecies &&
+      (normalizedQuery === selectedSpecies.comName || normalizedQuery === selectedSpecies.speciesCode)
+      ? selectedSpecies
+      : undefined;
+    void workflow.run({ source: "explicit", species, query: species ? undefined : normalizedQuery, days });
   }
 
   async function addTracking() {

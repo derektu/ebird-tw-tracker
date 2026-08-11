@@ -1,4 +1,5 @@
 import { normalizeSpecies } from "../domain/species.mjs";
+import { createSearchScope } from "../../src/domain/search-discovery.mjs";
 
 export function jsonResponse(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -21,7 +22,7 @@ export function readBody(request) {
   });
 }
 
-export function createApiRouter({ settings, species, observations, tracking }) {
+export function createApiRouter({ settings, species, observations, tracking, searchSnapshots }) {
   return async function handleApi(request, response, url) {
     if (url.pathname === "/api/settings/api-key" && request.method === "GET") {
       jsonResponse(response, 200, await settings.status());
@@ -71,6 +72,35 @@ export function createApiRouter({ settings, species, observations, tracking }) {
         generatedAt: new Date().toISOString(),
         observations: await observations.recent(speciesCode, days),
       });
+      return;
+    }
+    if (url.pathname === "/api/search-snapshots" && request.method === "GET") {
+      const scope = createSearchScope(url.searchParams.get("speciesCode"), url.searchParams.get("days"));
+      if (!scope.speciesCode) {
+        jsonResponse(response, 400, { error: "speciesCode is required" });
+        return;
+      }
+      jsonResponse(response, 200, { snapshot: await searchSnapshots.read(scope) });
+      return;
+    }
+    if (url.pathname === "/api/search-snapshot-sessions" && request.method === "POST") {
+      const body = JSON.parse(await readBody(request));
+      if (!searchSnapshots.advance(body.commitToken)) {
+        jsonResponse(response, 409, { error: "stale search snapshot session" });
+        return;
+      }
+      jsonResponse(response, 200, { advanced: true });
+      return;
+    }
+    if (url.pathname === "/api/search-snapshots" && request.method === "PUT") {
+      const body = JSON.parse(await readBody(request));
+      const scope = createSearchScope(body.scope?.speciesCode, body.scope?.days);
+      if (!scope.speciesCode || !body.snapshot || body.snapshot.scope?.key !== scope.key || !body.commitToken) {
+        jsonResponse(response, 400, { error: "valid scope, snapshot, and commit token are required" });
+        return;
+      }
+      const committed = await searchSnapshots.commit(scope, body.snapshot, body.commitToken);
+      jsonResponse(response, 200, { snapshot: committed ? body.snapshot : null, committed });
       return;
     }
 

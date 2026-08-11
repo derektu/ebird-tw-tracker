@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Species } from "../../types/domain";
 import { createDesktopSearchRuntime } from "./desktop-search-runtime.mjs";
+import { createDesktopSearchSnapshotStore } from "./desktop-search-snapshot-store.mjs";
 import { createSearchWorkflow } from "./search-workflow.mjs";
 import type {
   ObservationsResponse,
@@ -25,6 +26,7 @@ export function SearchToolbar() {
   const [busy, setBusy] = useState(false);
   const fieldRef = useRef<HTMLLabelElement>(null);
   const runtimeRef = useRef<ReturnType<typeof createDesktopSearchRuntime> | null>(null);
+  const snapshotStoreRef = useRef<ReturnType<typeof createDesktopSearchSnapshotStore> | null>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
 
   const fetchSavedSpecies = useCallback(() => fetchJson<Species[]>("/api/species/saved"), []);
@@ -53,9 +55,14 @@ export function SearchToolbar() {
   }
   const runtime = runtimeRef.current;
 
+  if (!snapshotStoreRef.current) {
+    snapshotStoreRef.current = createDesktopSearchSnapshotStore({ request: fetchJson });
+  }
+
   if (!workflowRef.current) {
     workflowRef.current = createSearchWorkflow({
       runtime,
+      snapshots: snapshotStoreRef.current,
       publish(event: SearchWorkflowEvent) {
         if (event.type === "busy") {
           setBusy(event.busy);

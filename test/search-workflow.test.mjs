@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createDesktopSearchRuntime } from "../src/features/search/desktop-search-runtime.mjs";
+import { createSearchScope, createSearchSnapshot } from "../src/domain/search-discovery.mjs";
 import { createSearchWorkflow } from "../src/features/search/search-workflow.mjs";
 
 const species = {
@@ -214,6 +215,7 @@ test("a stale failure cannot publish while the newest request publishes its resu
         species: latestSpecies,
         days: 30,
         payload: { ...payload, speciesCode: latestSpecies.speciesCode },
+        observations: payload.observations,
       },
     }],
   );
@@ -395,4 +397,219 @@ test("an explicit invalidation prevents an in-flight notification search from pu
   assert.equal(events[1].busy, false);
   assert.deepEqual(cancellations, [{ requestId: "search-1", source: "notification-focus" }]);
   assert.deepEqual(staleRequests, [{ requestId: "search-1", source: "notification-focus" }]);
+});
+
+test("baseline-eligible searches compare and replace Search Snapshots while notification focus bypasses them", async () => {
+  const scope = createSearchScope(species.speciesCode, 3);
+  const reads = [];
+  const commits = [];
+  let baseline = null;
+  const observations = [
+    { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S1" }] },
+    { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S2" }, { speciesCode: species.speciesCode, subId: "S1" }] },
+    { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S2" }] },
+  ];
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations() {
+        return observations.shift();
+      },
+    },
+    snapshots: {
+      async read(requestedScope) {
+        reads.push(requestedScope.key);
+        return baseline;
+      },
+      async commit(requestedScope, snapshot) {
+        commits.push(requestedScope.key);
+        baseline = snapshot;
+      },
+    },
+    publish() {},
+  });
+
+  const first = await workflow.run({ source: "startup", species, days: 3 });
+  const second = await workflow.run({ source: "explicit", species, days: 3 });
+  const notification = await workflow.run({ source: "notification-focus", species, days: 3 });
+
+  assert.equal(first.result.comparison.status, "baseline-created");
+  assert.equal(second.result.comparison.status, "compared");
+  assert.deepEqual(second.result.comparison.discoveryIds, ["grpsni1:S2"]);
+  assert.deepEqual(second.result.observations.map((item) => item.subId), ["S2", "S1"]);
+  assert.equal(notification.result.comparison, undefined);
+  assert.deepEqual(reads, [scope.key, scope.key]);
+  assert.deepEqual(commits, [scope.key, scope.key]);
+});
+
+test("Search Snapshot failures leave ordinary results visible with the specified comparison status", async () => {
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations() {
+        return { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S1" }] };
+      },
+    },
+    snapshots: {
+      async read() {
+        throw new Error("disk unavailable");
+      },
+      async commit() {
+        throw new Error("should not write");
+      },
+    },
+    publish() {},
+  });
+
+  const outcome = await workflow.run({ source: "explicit", species, days: 3 });
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(outcome.result.comparison.status, "unavailable");
+  assert.equal(outcome.result.comparison.reason, "baseline-read-failed");
+  assert.deepEqual(outcome.result.observations.map((item) => item.subId), ["S1"]);
+});
+
+test("a failed replacement retains discoveries while an initial save failure reports unavailable", async () => {
+  const scope = createSearchScope(species.speciesCode, 3);
+  const baseline = createSearchSnapshot(scope, [{ speciesCode: species.speciesCode, subId: "S1" }], "2026-08-10T00:00:00.000Z");
+  const createWorkflow = (savedBaseline) => createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations() {
+        return { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S2" }, { speciesCode: species.speciesCode, subId: "S1" }] };
+      },
+    },
+    snapshots: {
+      async read() {
+        return savedBaseline;
+      },
+      async commit() {
+        throw new Error("disk unavailable");
+      },
+    },
+    publish() {},
+  });
+
+  const replacement = await createWorkflow(baseline).run({ source: "explicit", species, days: 3 });
+  const initial = await createWorkflow(null).run({ source: "startup", species, days: 3 });
+
+  assert.equal(replacement.result.comparison.status, "compared");
+  assert.equal(replacement.result.comparison.snapshotCommit, "save-failed");
+  assert.deepEqual(replacement.result.comparison.discoveryIds, ["grpsni1:S2"]);
+  assert.deepEqual(replacement.result.observations.map((item) => item.subId), ["S2", "S1"]);
+  assert.equal(initial.result.comparison.status, "unavailable");
+  assert.equal(initial.result.comparison.reason, "initial-save-failed");
+  assert.deepEqual(initial.result.observations.map((item) => item.subId), ["S2", "S1"]);
+});
+
+test("a stale baseline read cannot commit or publish a Search Snapshot", async () => {
+  const read = deferred();
+  const events = [];
+  const commits = [];
+  const latestSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode, observations: [] };
+      },
+    },
+    snapshots: {
+      read(scope) {
+        return scope.speciesCode === species.speciesCode ? read.promise : Promise.resolve(null);
+      },
+      async commit(scope) {
+        commits.push(scope.key);
+      },
+    },
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const older = workflow.run({ source: "startup", species, days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const latest = await workflow.run({ source: "explicit", species: latestSpecies, days: 3 });
+  read.resolve(null);
+
+  assert.equal(latest.status, "completed");
+  assert.deepEqual(await older, { status: "stale", requestId: "search-1", source: "startup" });
+  assert.deepEqual(commits, ["yebgre1:3"]);
+  assert.deepEqual(events.filter((event) => event.type === "completed").map((event) => event.result.species.speciesCode), ["yebgre1"]);
+});
+
+test("a stale snapshot commit is cancelled before it can replace the baseline", async () => {
+  const commit = deferred();
+  const writes = [];
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode, observations: [] };
+      },
+    },
+    snapshots: {
+      async read() {
+        return null;
+      },
+      async commit(scope, snapshot, token) {
+        await commit.promise;
+        if (!token.isCurrent()) return false;
+        writes.push({ scope, snapshot });
+      },
+    },
+    publish() {},
+  });
+
+  const older = workflow.run({ source: "startup", species, days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const latest = workflow.run({ source: "notification-focus", species, days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  commit.resolve();
+
+  assert.deepEqual(await older, { status: "stale", requestId: "search-1", source: "startup" });
+  assert.equal((await latest).status, "completed");
+  assert.deepEqual(writes, []);
+});
+
+test("an unavailable snapshot session still publishes ordinary search results", async () => {
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        return intent.species;
+      },
+      async fetchObservations() {
+        return { ...payload, observations: [{ speciesCode: species.speciesCode, subId: "S1" }] };
+      },
+    },
+    snapshots: {
+      async advance() {
+        throw new Error("snapshot session unavailable");
+      },
+      async read() {
+        throw new Error("must not read");
+      },
+      async commit() {
+        throw new Error("must not write");
+      },
+    },
+    publish() {},
+  });
+
+  const outcome = await workflow.run({ source: "explicit", species, days: 3 });
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(outcome.result.comparison.status, "unavailable");
+  assert.equal(outcome.result.comparison.reason, "baseline-read-failed");
+  assert.deepEqual(outcome.result.observations.map((item) => item.subId), ["S1"]);
 });

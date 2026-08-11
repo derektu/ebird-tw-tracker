@@ -1,4 +1,4 @@
-import type { SearchIntent, SearchRuntime, SearchWorkflowEvent } from "./types";
+import type { SearchIntent, SearchRuntime, SearchSnapshotStore, SearchWorkflowEvent } from "./types";
 
 export type { SearchWorkflowEvent } from "./types";
 
@@ -23,6 +23,8 @@ export function createSearchWorkflow(options: {
     requestId: string;
     source: import("./types").SearchSource;
   }) => void;
+  snapshots?: SearchSnapshotStore;
+  now?: () => string;
   createRequestId?: (sequence: number) => string;
 }): SearchWorkflow;
 

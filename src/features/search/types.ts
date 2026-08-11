@@ -1,4 +1,5 @@
 import type { Observation, Species } from "../../types/domain";
+import type { SearchComparison, SearchScope, SearchSnapshot } from "../../domain/search-discovery.mjs";
 
 export interface ObservationsResponse {
   speciesCode: string;
@@ -39,6 +40,18 @@ export interface SearchResult {
   species: Species;
   days: number;
   payload: ObservationsResponse;
+  observations: Observation[];
+  comparison?: SearchComparison;
+}
+
+export interface SearchSnapshotStore {
+  read(scope: SearchScope, token?: SearchSnapshotToken): Promise<SearchSnapshot | null>;
+  commit(scope: SearchScope, snapshot: SearchSnapshot, token?: SearchSnapshotToken): Promise<void | false>;
+}
+
+export interface SearchSnapshotToken {
+  isCurrent(): boolean;
+  signal?: AbortSignal;
 }
 
 export interface SearchObservationRequest {

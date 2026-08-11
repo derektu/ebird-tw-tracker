@@ -44,4 +44,15 @@ test("local API exposes service state without returning an API key", async (cont
   });
   assert.equal(invalidKeyResponse.status, 400);
   assert.deepEqual(await invalidKeyResponse.json(), { error: "請輸入有效的 eBird API key" });
+
+  const scope = { speciesCode: "grpsni1", days: 3, key: "grpsni1:3" };
+  const snapshot = { scope, recordedAt: "2026-08-11T00:00:00.000Z", identityIds: ["grpsni1:S1"] };
+  const saveSnapshot = await fetch(`${address.url}/api/search-snapshots`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ scope, snapshot }),
+  });
+  assert.equal(saveSnapshot.status, 200);
+  const loadedSnapshot = await fetch(`${address.url}/api/search-snapshots?speciesCode=GRPSNI1&days=3`);
+  assert.deepEqual(await loadedSnapshot.json(), { snapshot });
 });

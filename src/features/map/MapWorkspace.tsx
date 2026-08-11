@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
 import type { SearchRequest, SearchResult } from "../search/types";
+import { createChecklistIdentity, createSearchScope } from "../../domain/search-discovery.mjs";
+import type { SearchComparison } from "../../domain/search-discovery.mjs";
 import type { Tracker } from "../tracking/types";
 import {
   notificationCanApplyToSearchResult,
@@ -17,16 +19,17 @@ const SHOW_SELECTED_CHECKLIST_CARD = false;
 interface MapEntry {
   marker: Marker;
   observation: Observation;
+  discovery: boolean;
 }
 
 function publishStatus(message: string, isError = false) {
   window.dispatchEvent(new CustomEvent("app:status", { detail: { message, isError } }));
 }
 
-function createMarkerIcon(observation: Observation, active = false) {
+function createMarkerIcon(observation: Observation, active = false, discovery = false) {
   const size = active ? 34 : 28;
   const marker = document.createElement("div");
-  marker.className = ["bird-marker", observation.locationPrivate ? "private" : "", active ? "active" : ""]
+  marker.className = ["bird-marker", observation.locationPrivate ? "private" : "", discovery ? "discovery" : "", active ? "active" : ""]
     .filter(Boolean)
     .join(" ");
   marker.textContent = observation.howMany == null ? "?" : String(observation.howMany);
@@ -143,6 +146,8 @@ export function MapWorkspace() {
   const requestSequence = useRef(0);
   const [species, setSpecies] = useState<Species | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [comparison, setComparison] = useState<SearchComparison | undefined>(undefined);
+  const [comparisonScopeKey, setComparisonScopeKey] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const loadObserverName = useCallback((subId: string) => {
@@ -164,7 +169,7 @@ export function MapWorkspace() {
   const activate = useCallback((index: number, zoomToPoint = false, openPopup = true) => {
     const entries = entriesRef.current;
     if (index < 0 || index >= entries.length) return;
-    entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index)));
+    entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index, entry.discovery)));
     setActiveIndex(index);
     listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
@@ -207,13 +212,17 @@ export function MapWorkspace() {
       }
       const nextObservations =
         pending && canApplyNotification
-          ? prioritizeNotificationObservation(result.payload.observations, pending.observation)
-          : result.payload.observations;
+          ? prioritizeNotificationObservation(result.observations, pending.observation)
+          : result.observations;
       speciesRef.current = result.species;
       searchDaysRef.current = result.days;
       observationsRef.current = nextObservations;
       setSpecies(result.species);
       setObservations(nextObservations);
+      if (result.source !== "notification-focus") {
+        setComparison(result.comparison);
+        setComparisonScopeKey(createSearchScope(result.species.speciesCode, result.days).key);
+      }
       setActiveIndex(nextObservations.length ? 0 : -1);
     };
     const handleTrackers = (event: Event) => {
@@ -270,9 +279,14 @@ export function MapWorkspace() {
     const map = mapRef.current;
     if (!map) return;
     entriesRef.current.forEach(({ marker }) => marker.remove());
+    const visibleComparison = comparisonScopeKey === (species && createSearchScope(species.speciesCode, searchDaysRef.current).key)
+      ? comparison
+      : undefined;
+    const discoveryIds = new Set(visibleComparison?.discoveryIds ?? []);
     entriesRef.current = observations.map((observation, index) => {
+      const discovery = discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId));
       const popup = createPopup(observation);
-      const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === 0) })
+      const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === 0, discovery) })
         .addTo(map)
         .bindPopup(popup.element);
       marker.on("click", () => activate(index));
@@ -282,7 +296,7 @@ export function MapWorkspace() {
           .then((name) => popup.showObserver(name))
           .catch(() => popup.showObserver(null));
       });
-      return { marker, observation };
+      return { marker, observation, discovery };
     });
     listItemsRef.current = [];
     map.fitBounds(TAIWAN_BOUNDS, { padding: [18, 18] });
@@ -303,7 +317,7 @@ export function MapWorkspace() {
         publishStatus(`${pending.species.comName} 新紀錄：${pending.observation.locName}`);
       }
     }
-  }, [activate, loadObserverName, observations]);
+  }, [activate, comparison, comparisonScopeKey, loadObserverName, observations, species]);
 
   const activeObservation = activeIndex >= 0 ? observations[activeIndex] : null;
   const birdCount = useMemo(
@@ -314,6 +328,19 @@ export function MapWorkspace() {
     () => observations.filter((observation) => observation.locationPrivate).length,
     [observations],
   );
+  const visibleComparison = comparisonScopeKey === (species && createSearchScope(species.speciesCode, searchDaysRef.current).key)
+    ? comparison
+    : undefined;
+  const comparisonMessage = visibleComparison?.status === "baseline-created"
+    ? "已建立搜尋比較基準"
+    : visibleComparison?.status === "compared"
+      ? visibleComparison.discoveryIds.length
+        ? `新增 ${visibleComparison.discoveryIds.length} 筆紀錄${visibleComparison.snapshotCommit === "save-failed" ? "；基準未更新" : ""}`
+        : `沒有新增紀錄${visibleComparison.snapshotCommit === "save-failed" ? "；基準未更新" : ""}`
+      : visibleComparison?.status === "unavailable"
+        ? "搜尋比較暫時無法使用"
+        : null;
+  const discoveryIds = new Set(visibleComparison?.discoveryIds ?? []);
 
   return (
     <main className="workspace">
@@ -368,6 +395,7 @@ export function MapWorkspace() {
           <strong>{species?.comName ?? "鳥種"}</strong>
           <span>{species?.speciesCode ?? ""}</span>
         </section>
+        {comparisonMessage && <div className={`comparison${visibleComparison?.status === "unavailable" || (visibleComparison?.status === "compared" && visibleComparison.snapshotCommit === "save-failed") ? " warning" : ""}`}>{comparisonMessage}</div>}
         <div className="list">
           {observations.length ? observations.map((observation, index) => (
             <button
@@ -379,6 +407,7 @@ export function MapWorkspace() {
             >
               <div className="item-title"><span>{observation.locName}</span><span>{observation.howMany ?? "?"}</span></div>
               <div className="item-meta">{observation.obsDt} / {observation.subId}</div>
+              {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <div className="tag discovery">新增</div>}
               {observation.locationPrivate && <div className="tag">自訂地點</div>}
             </button>
           )) : (

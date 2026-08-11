@@ -6,6 +6,7 @@ import { createEbirdClient, validateApiKey } from "./services/ebird-client.mjs";
 import { createObservationService } from "./services/observation-service.mjs";
 import { createSettingsService } from "./services/settings-service.mjs";
 import { createSpeciesService } from "./services/species-service.mjs";
+import { createSearchSnapshotStore } from "./services/search-snapshot-store.mjs";
 import { createTrackingService } from "./services/tracking-service.mjs";
 
 const MIME_TYPES = new Map([
@@ -39,6 +40,7 @@ export async function createApplication({
     events: path.join(dataDir, "events.json"),
     settings: path.join(dataDir, "settings.json"),
     taxonomy: path.join(dataDir, "taxonomy-cache.zh.json"),
+    searchSnapshots: path.join(dataDir, "search-snapshots.json"),
   };
 
   let settings;
@@ -60,7 +62,8 @@ export async function createApplication({
     onEvents,
     onStateChange: onTrackingStateChange,
   });
-  const handleApi = createApiRouter({ settings, species, observations, tracking });
+  const searchSnapshots = createSearchSnapshotStore({ filePath: paths.searchSnapshots });
+  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots });
 
   let vite = null;
   if (!isProduction) {
@@ -133,5 +136,5 @@ export async function createApplication({
     await vite?.close();
   }
 
-  return { listen, close, server, services: { settings, species, observations, tracking } };
+  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots } };
 }

@@ -839,6 +839,10 @@ select {
   background: var(--private);
 }
 
+.bird-marker.discovery {
+  box-shadow: 0 0 0 4px #f4bf4f, 0 2px 8px rgba(0, 0, 0, .28);
+}
+
 .bird-marker.active {
   width: 34px;
   height: 34px;
@@ -846,6 +850,29 @@ select {
   border-width: 3px;
   transform: translate(-3px, -3px);
   box-shadow: 0 3px 12px rgba(0, 0, 0, .38);
+}
+
+.comparison {
+  margin: 10px 14px 0;
+  padding: 8px 10px;
+  border: 1px solid #bddbcb;
+  border-radius: 8px;
+  background: #eef8f3;
+  color: var(--active);
+  font-size: 13px;
+}
+
+.comparison.warning {
+  border-color: #ead5bb;
+  background: #fff7ec;
+  color: var(--private);
+}
+
+.tag.discovery {
+  margin-right: 5px;
+  border-color: #efd28a;
+  background: #fff8df;
+  color: #8a6100;
 }
 
 .popup {

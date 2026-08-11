@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { readJson, writeJson } from "../storage/json-store.mjs";
 
 const EMPTY_STORE = { snapshots: {} };
@@ -6,8 +7,9 @@ function isCommitToken(token) {
   return typeof token?.sessionId === "string" && token.sessionId.length > 0 && Number.isInteger(token.generation) && token.generation > 0;
 }
 
-export function createSearchSnapshotStore({ filePath, beforeWrite } = {}) {
+export function createSearchSnapshotStore({ filePath, beforeWrite, writeSnapshot = writeJson } = {}) {
   const latestGenerationBySession = new Map();
+  let temporaryFileSequence = 0;
 
   function isCurrent(token) {
     return !isCommitToken(token) || latestGenerationBySession.get(token.sessionId) === token.generation;
@@ -39,7 +41,13 @@ export function createSearchSnapshotStore({ filePath, beforeWrite } = {}) {
       if (!isCurrent(token)) return false;
       stored.snapshots[scope.key] = snapshot;
       if (typeof token?.isCurrent === "function" && !token.isCurrent()) return false;
-      await writeJson(filePath, stored);
+      const temporaryFilePath = `${filePath}.pending-${++temporaryFileSequence}`;
+      await writeSnapshot(temporaryFilePath, stored);
+      if (!isCurrent(token) || (typeof token?.isCurrent === "function" && !token.isCurrent())) {
+        fs.rmSync(temporaryFilePath, { force: true });
+        return false;
+      }
+      fs.renameSync(temporaryFilePath, filePath);
       return true;
     },
   };

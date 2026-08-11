@@ -96,6 +96,7 @@ test("search workflow resolves a query through the runtime and preserves a suppl
 test("only the latest request can publish a result, failure, or busy clear", async () => {
   const requests = new Map();
   const events = [];
+  const staleRequests = [];
   const workflow = createSearchWorkflow({
     runtime: {
       async resolveSpecies(intent) {
@@ -109,6 +110,9 @@ test("only the latest request can publish a result, failure, or busy clear", asy
     },
     publish(event) {
       events.push(event);
+    },
+    onStale(request) {
+      staleRequests.push(request);
     },
   });
 
@@ -125,6 +129,7 @@ test("only the latest request can publish a result, failure, or busy clear", asy
   requests.get("search-2").reject(new Error("最新搜尋失敗"));
 
   assert.deepEqual(await first, { status: "stale", requestId: "search-1", source: "explicit" });
+  assert.deepEqual(staleRequests, [{ requestId: "search-1", source: "explicit" }]);
   assert.deepEqual(await second, {
     status: "failed",
     error: { requestId: "search-2", source: "notification-focus", message: "最新搜尋失敗" },

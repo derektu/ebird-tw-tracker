@@ -87,7 +87,7 @@ function createPopup(observation: Observation) {
 }
 
 function requestSpeciesSearch(species: Species, days: number, requestId: string) {
-  return new Promise<SearchResult>((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error("鳥種搜尋逾時"));
@@ -96,7 +96,7 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
       const result = (event as CustomEvent<SearchResult>).detail;
       if (result.requestId !== requestId) return;
       cleanup();
-      resolve(result);
+      resolve();
     };
     const failed = (event: Event) => {
       const detail = (event as CustomEvent<{ requestId: string; message: string }>).detail;
@@ -104,13 +104,21 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
       cleanup();
       reject(new Error(detail.message));
     };
+    const stale = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestId: string }>).detail;
+      if (detail.requestId !== requestId) return;
+      cleanup();
+      resolve();
+    };
     const cleanup = () => {
       window.clearTimeout(timeout);
       window.removeEventListener("search:completed", completed);
       window.removeEventListener("search:failed", failed);
+      window.removeEventListener("search:stale", stale);
     };
     window.addEventListener("search:completed", completed);
     window.addEventListener("search:failed", failed);
+    window.addEventListener("search:stale", stale);
     const request: SearchRequest = { requestId, source: "notification-focus", species, days };
     window.dispatchEvent(new CustomEvent("search:request", { detail: request }));
   });

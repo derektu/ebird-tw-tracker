@@ -20,6 +20,7 @@ function errorMessage(error) {
 export function createSearchWorkflow({
   runtime,
   publish,
+  onStale,
   createRequestId = (sequence) => `search-${sequence}`,
 }) {
   let sequence = 0;
@@ -48,6 +49,7 @@ export function createSearchWorkflow({
     try {
       const species = await runtime.resolveSpecies(normalizedIntent);
       if (!isCurrent(requestGeneration)) {
+        onStale?.({ requestId, source });
         return { status: "stale", requestId, source };
       }
 
@@ -58,6 +60,7 @@ export function createSearchWorkflow({
         days,
       });
       if (!isCurrent(requestGeneration)) {
+        onStale?.({ requestId, source });
         return { status: "stale", requestId, source };
       }
 
@@ -67,6 +70,7 @@ export function createSearchWorkflow({
       return { status: "completed", result };
     } catch (error) {
       if (!isCurrent(requestGeneration)) {
+        onStale?.({ requestId, source });
         return { status: "stale", requestId, source };
       }
 

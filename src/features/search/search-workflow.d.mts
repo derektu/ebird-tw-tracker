@@ -14,6 +14,10 @@ export interface SearchWorkflow {
 export function createSearchWorkflow(options: {
   runtime: SearchRuntime;
   publish: (event: SearchWorkflowEvent) => void;
+  onStale?: (request: {
+    requestId: string;
+    source: import("./types").SearchSource;
+  }) => void;
   createRequestId?: (sequence: number) => string;
 }): SearchWorkflow;
 

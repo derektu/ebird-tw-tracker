@@ -84,6 +84,9 @@ export function SearchToolbar() {
         window.dispatchEvent(new CustomEvent("search:failed", { detail: event.error }));
         publishStatus(event.error.message, true);
       },
+      onStale(request: { requestId: string; source: "startup" | "explicit" | "notification-focus" }) {
+        window.dispatchEvent(new CustomEvent("search:stale", { detail: request }));
+      },
     });
   }
   const workflow = workflowRef.current;

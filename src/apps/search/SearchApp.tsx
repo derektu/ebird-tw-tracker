@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiKeyValidationError, validateBrowserApiKey } from "../../api/worker-client";
+import { ApiKeyValidationError, validateBrowserApiKey } from "../../api/worker-client.mjs";
 import { forgetBrowserApiKey, readBrowserApiKey, saveBrowserApiKey } from "../../storage/browser-api-key";
 import { ApiKeyGate } from "./ApiKeyGate";
 
@@ -7,6 +7,12 @@ type GateState = "checking" | "gate" | "ready";
 
 function messageFor(error: unknown) {
   return error instanceof ApiKeyValidationError ? error.message : "目前無法驗證 API key，請稍後再試";
+}
+
+function clearInvalidBrowserApiKey(error: unknown) {
+  if (error instanceof ApiKeyValidationError && [401, 403].includes(error.status)) {
+    forgetBrowserApiKey();
+  }
 }
 
 export function SearchApp() {
@@ -30,6 +36,7 @@ export function SearchApp() {
       }
       setState("ready");
     } catch (validationError) {
+      clearInvalidBrowserApiKey(validationError);
       setState("gate");
       setError(messageFor(validationError));
     }
@@ -48,9 +55,7 @@ export function SearchApp() {
       },
       (validationError) => {
         if (disposed) return;
-        if (validationError instanceof ApiKeyValidationError && [401, 403].includes(validationError.status)) {
-          forgetBrowserApiKey();
-        }
+        clearInvalidBrowserApiKey(validationError);
         setState("gate");
         setError(messageFor(validationError));
       },

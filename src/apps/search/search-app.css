@@ -1,0 +1,71 @@
+:root {
+  color: #172018;
+  background: #eef2ec;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+button, input { font: inherit; }
+
+.search-app-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.api-key-card {
+  width: min(100%, 480px);
+  padding: 28px;
+  border: 1px solid #d3ddd4;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(27, 42, 31, .16);
+}
+
+.search-app-eyebrow {
+  margin: 0 0 8px;
+  color: #0f7b57;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.api-key-card h1 { margin: 0; font-size: 24px; }
+
+.api-key-card > p:not(.search-app-eyebrow) { color: #627065; line-height: 1.55; }
+
+.api-key-card form { display: grid; gap: 9px; margin-top: 24px; }
+
+.api-key-card label { font-size: 14px; font-weight: 600; }
+
+.api-key-card input {
+  min-height: 44px;
+  border: 1px solid #aebcaf;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.api-key-card input:focus { border-color: #0f7b57; outline: 3px solid rgba(15, 123, 87, .15); }
+
+.search-app-primary, .search-app-secondary {
+  min-height: 44px;
+  border: 1px solid #0a5b40;
+  border-radius: 8px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.search-app-primary { background: #0a5b40; color: #fff; }
+.search-app-primary:disabled { cursor: wait; opacity: .7; }
+.search-app-secondary { background: #fff; color: #0a5b40; }
+.api-key-error { margin: 0; color: #b3261e; line-height: 1.45; }
+.search-app-ready { display: grid; gap: 16px; }
+.search-app-ready p { margin: 0; }
+
+@media (max-width: 520px) {
+  .search-app-shell { place-items: start stretch; padding: 16px; }
+  .api-key-card { padding: 22px; }
+}

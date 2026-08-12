@@ -23,7 +23,7 @@ eBird Taiwan Tracker 是台灣鳥種近期觀察紀錄的搜尋與背景追蹤�
 - electron-builder
 - eBird API 2.0
 
-瀏覽器不會直接持有 eBird API key。Node server 負責呼叫 eBird API、解析鳥種、保存追蹤規則、執行排程及產生通知。Electron 只提供桌面視窗、Menu Bar、原生通知與安全設定儲存，不另外實作業務邏輯。
+Desktop App 的瀏覽器介面不會直接持有 eBird API key。Node server 負責呼叫 eBird API、解析鳥種、保存追蹤規則、執行排程及產生通知。Electron 只提供桌面視窗、Menu Bar、原生通知與安全設定儲存，不另外實作業務邏輯。
 
 ## 環境需求
 
@@ -84,6 +84,31 @@ npm run check
 ```
 
 `check` 依序執行 TypeScript 型別檢查、自動化測試及 Vite production build。
+
+### Search App API key gate preview
+
+Search App 是獨立的 Cloudflare Workers Static Assets 入口。目前可預覽 API key gate；它不啟動 Node server、不使用資料庫，也不包含 Desktop 的 Tracker、通知或設定介面。
+
+```bash
+npm run build:search
+npm run dev:cloudflare
+```
+
+在 <http://127.0.0.1:7082/> 開啟預覽。這個本機 port 已為本專案的 Cloudflare preview 保留。預覽使用 HTTP 只限本機開發；Cloudflare deployment 的同源 API key request 必須使用 HTTPS。
+
+首次使用時，輸入 key 後會以同源 `POST /api/key/validate` 的 `X-eBird-Api-Key` header 驗證；成功後 key 才保存至目前 browser origin 的 `localStorage`。每次回到 App 都會重新驗證。401/403 會清除已保存 key；暫時性的網路、rate-limit 或 upstream 錯誤會保留 key；「忘記 API key」只清除 key。
+
+Search App 的 key 會短暫通過自行部署的 Worker，因此只應在自己的或完全信任的 deployment 輸入。這是與 Desktop App 不同、由 [ADR 0003](docs/adr/0003-browser-owned-key-for-the-search-app.md) 定義的信任邊界。
+
+驗證 Worker 與瀏覽器可見流程：
+
+```bash
+npm run test:worker
+npx playwright install chromium
+npm run test:browser
+```
+
+`npm run check:all` 執行既有 Desktop check、Worker tests 與 Search App browser tests。
 
 ## Production web build
 
@@ -156,7 +181,7 @@ Build workflow 不需要 eBird API key，也不會保存 application data。它�
 - `.env`、API key、追蹤規則、通知與 taxonomy cache 不納入 Git。
 - Electron 使用作業系統的 user-data 目錄保存追蹤資料。
 - Electron renderer 啟用 context isolation、停用 Node integration，並透過最小化 preload bridge 接收桌面通知事件。
-- eBird API key 不會放入查詢 URL、前端 bundle 或 localStorage。
+- Desktop App 的 eBird API key 不會放入查詢 URL、前端 bundle 或 localStorage。Search App 的 browser-owned key 只會在驗證成功後保存於目前 origin 的 localStorage，且不會進入 URL、bundle、response 或 Worker log。
 - 使用本專案時應遵守 eBird API 與資料使用條款，並避免過度頻繁查詢。
 
 ## 專案結構
@@ -179,6 +204,11 @@ docs/       開發與架構文件
 | `npm run typecheck` | TypeScript 型別檢查 |
 | `npm test` | 執行自動化測試 |
 | `npm run check` | 型別、測試及 production build |
+| `npm run build:search` | 建置 Cloudflare Search App 靜態資產 |
+| `npm run dev:cloudflare` | 在 port 7082 啟動本機 Cloudflare Search App preview |
+| `npm run test:worker` | 驗證 Search App Worker 的 request-to-response contract |
+| `npm run test:browser` | 驗證 Search App API key gate 的瀏覽器可見流程 |
+| `npm run check:all` | Desktop、Worker 與 Search App 完整檢查 |
 | `npm run electron:pack` | 建立 macOS ad-hoc signed unpacked app |
 | `npm run electron:build:mac` | 建立目前架構的 macOS ad-hoc signed DMG |
 | `npm run electron:build:mac:all` | 建立 x64 與 arm64 macOS ad-hoc signed DMG |

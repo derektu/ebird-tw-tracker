@@ -15,6 +15,11 @@ data/search-snapshots.json
 painted-snipe-map.html
 node_modules/
 dist/
+dist-search/
+.wrangler-config/
+.wrangler/
+playwright-report/
+test-results/
 .electron-user-data/
 release/
 *.dmg

@@ -43,7 +43,7 @@ test("validation forwards a browser key only to the fixed eBird endpoint and nev
 
   assert.equal(response.status, 200);
   assert.equal(body, '{"valid":true}');
-  assert.equal(upstreamRequest.url, "https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&locale=zh");
+  assert.equal(upstreamRequest.url, "https://api.ebird.org/v2/data/obs/TW/recent?back=1&maxResults=1");
   assert.equal(upstreamRequest.headers.get("x-ebirdapitoken"), apiKey);
   assert.equal(upstreamRequest.headers.get("x-ebird-api-key"), null);
   assert.ok(!upstreamRequest.url.includes(apiKey));

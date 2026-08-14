@@ -1,4 +1,4 @@
-const defaultTimeoutMs = 1_000;
+const defaultTimeoutMs = 5_000;
 
 export class ApiKeyValidationError extends Error {
   constructor(status, message) {

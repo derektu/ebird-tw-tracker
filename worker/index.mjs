@@ -1,5 +1,5 @@
 const validationPath = "/api/key/validate";
-const taxonomyValidationUrl = "https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&locale=zh";
+const validationProbeUrl = "https://api.ebird.org/v2/data/obs/TW/recent?back=1&maxResults=1";
 
 function json(status, payload, headers = {}) {
   return new Response(JSON.stringify(payload), {
@@ -32,7 +32,7 @@ async function validateKey(request, upstreamFetch) {
 
   let upstreamResponse;
   try {
-    upstreamResponse = await upstreamFetch(new Request(taxonomyValidationUrl, {
+    upstreamResponse = await upstreamFetch(new Request(validationProbeUrl, {
       method: "GET",
       headers: { "x-ebirdapitoken": apiKey },
     }));

@@ -110,6 +110,24 @@ npm run test:browser
 
 `npm run check:all` 執行既有 Desktop check、Worker tests 與 Search App browser tests。
 
+### Search App real eBird integration tests
+
+一般 `npm test` 只執行 `test/` 中不連網的測試；它不會執行 `integration/`。Search App 的 Worker 以 eBird 的 [Recent observations in a region](https://documenter.getpostman.com/view/3897235/S1ENwy59) 作為 API key probe，請求固定為 `GET /v2/data/obs/TW/recent?back=1&maxResults=1`。eBird 文件將此 endpoint 標記為需要 `X-eBirdApiToken`。
+
+```bash
+npm run test:integration
+```
+
+這個 opt-in command 一律使用明顯無效的 test key 驗證真實 eBird endpoint 會回傳 authentication failure，因此需要網路；網路或 eBird 暫時不可用時它會失敗，而不是把外部驗證誤報成通過。若目前 shell 已安全地提供 `EBIRD_API_KEY`，同一個 command 也會驗證 valid path，且不輸出、保存或回傳 key。沒有該環境變數時 valid-path test 會明確標記為 `SKIP`。
+
+若本機或受控環境要求 valid-path evidence，使用：
+
+```bash
+npm run test:integration:required
+```
+
+這個 variant 在沒有 `EBIRD_API_KEY` 時會失敗，避免把 skipped valid-path test 誤當成已驗證。CI 只執行一般 `npm run check`，不執行有網路與憑證依賴的 integration tests。
+
 ## Production web build
 
 ```bash
@@ -191,6 +209,7 @@ electron/   Electron main process、preload、安全設定儲存
 server/     HTTP API、eBird client、追蹤服務、domain 與 JSON storage
 src/        React／TypeScript 前端
 test/       Node test runner 自動化測試
+integration/ 真實 eBird API 的 opt-in integration tests
 build/      Electron app icon、entitlement 與 build resources
 docs/       開發與架構文件
 ```
@@ -207,6 +226,8 @@ docs/       開發與架構文件
 | `npm run build:search` | 建置 Cloudflare Search App 靜態資產 |
 | `npm run dev:cloudflare` | 在 port 7082 啟動本機 Cloudflare Search App preview |
 | `npm run test:worker` | 驗證 Search App Worker 的 request-to-response contract |
+| `npm run test:integration` | 使用 fake key 驗證真實 eBird API 的拒絕路徑；沒有本機 key 時略過 valid path |
+| `npm run test:integration:required` | 要求 `EBIRD_API_KEY` 的真實 eBird valid-path verification |
 | `npm run test:browser` | 驗證 Search App API key gate 的瀏覽器可見流程 |
 | `npm run check:all` | Desktop、Worker 與 Search App 完整檢查 |
 | `npm run electron:pack` | 建立 macOS ad-hoc signed unpacked app |

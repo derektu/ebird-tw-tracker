@@ -88,7 +88,7 @@ test("temporary validation failures retain a saved key and return to the visible
     await page.route("**/api/key/validate", async (route) => {
       if (failure.abort) return route.abort(failure.abort);
       if (failure.timeout) {
-        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        await new Promise((resolve) => setTimeout(resolve, 5_500));
         return route.fulfill({ status: 200, contentType: "application/json", body: '{"valid":true}' });
       }
       return route.fulfill({ status: failure.status, contentType: "application/json", body: failure.body });
@@ -96,7 +96,7 @@ test("temporary validation failures retain a saved key and return to the visible
     await page.addInitScript((key) => localStorage.setItem("ebird-search-api-key", key), apiKey);
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "輸入你的 eBird API key" })).toBeVisible();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("alert")).toBeVisible({ timeout: 7_000 });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("ebird-search-api-key"))).toBe(apiKey);
     await page.evaluate(() => localStorage.clear());
   }

@@ -1,16 +1,11 @@
+import { error, json } from "./responses.mjs";
+import { handleObservations, handleSpeciesResolve, handleSpeciesSearch } from "./routes.mjs";
+
 const validationPath = "/api/key/validate";
+const speciesSearchPath = "/api/species/search";
+const speciesResolvePath = "/api/species/resolve";
+const observationsPath = "/api/observations";
 const validationProbeUrl = "https://api.ebird.org/v2/data/obs/TW/recent?back=1&maxResults=1";
-
-function json(status, payload, headers = {}) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
-  });
-}
-
-function error(status, code, message) {
-  return json(status, { code, error: message });
-}
 
 function invalidRequest(url) {
   return error(404, "not_found", `找不到 ${url.pathname}`);
@@ -55,13 +50,23 @@ async function validateKey(request, upstreamFetch) {
   return json(200, { valid: true });
 }
 
-export function createSearchWorker({ fetch: upstreamFetch = fetch, assets } = {}) {
+export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache } = {}) {
+  const deps = { upstreamFetch, cache };
   return {
     async fetch(request) {
       const url = new URL(request.url);
 
       if (url.pathname === validationPath) {
         return validateKey(request, upstreamFetch);
+      }
+      if (url.pathname === speciesSearchPath) {
+        return handleSpeciesSearch(request, url, deps);
+      }
+      if (url.pathname === speciesResolvePath) {
+        return handleSpeciesResolve(request, url, deps);
+      }
+      if (url.pathname === observationsPath) {
+        return handleObservations(request, url, deps);
       }
 
       if (url.pathname.startsWith("/api/")) {
@@ -81,6 +86,6 @@ export function createSearchWorker({ fetch: upstreamFetch = fetch, assets } = {}
 
 export default {
   fetch(request, environment) {
-    return createSearchWorker({ assets: environment.ASSETS }).fetch(request);
+    return createSearchWorker({ assets: environment.ASSETS, cache: caches.default }).fetch(request);
   },
 };

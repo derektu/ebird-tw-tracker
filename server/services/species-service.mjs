@@ -1,4 +1,4 @@
-import { normalizeSpecies, normalizeText } from "../domain/species.mjs";
+import { normalizeSpecies, searchTaxonomy } from "../domain/species.mjs";
 import { readJson, writeJson } from "../storage/json-store.mjs";
 
 export function createSpeciesService({ ebird, savedSpeciesPath, taxonomyCachePath, now = () => new Date() }) {
@@ -15,20 +15,7 @@ export function createSpeciesService({ ebird, savedSpeciesPath, taxonomyCachePat
   }
 
   async function search(query) {
-    const term = normalizeText(query);
-    if (!term) return [];
-    const exact = [];
-    const startsWith = [];
-    const contains = [];
-    for (const item of await taxonomy()) {
-      if (item.category && item.category !== "species" && item.category !== "issf") continue;
-      const fields = [item.comName, item.sciName, item.speciesCode].map(normalizeText);
-      const normalized = normalizeSpecies(item);
-      if (fields.some((value) => value === term)) exact.push(normalized);
-      else if (fields.some((value) => value.startsWith(term))) startsWith.push(normalized);
-      else if (fields.some((value) => value.includes(term))) contains.push(normalized);
-    }
-    return [...exact, ...startsWith, ...contains].slice(0, 20);
+    return searchTaxonomy(await taxonomy(), query);
   }
 
   async function listSaved() {

@@ -12,8 +12,15 @@
     "build": "vite build",
     "start": "NODE_ENV=production node server.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test",
+    "test": "node --test test/*.test.mjs",
     "check": "npm run typecheck && npm test && npm run build",
+    "build:search": "vite build --config vite.search.config.ts",
+    "dev:cloudflare": "XDG_CONFIG_HOME=.wrangler-config WRANGLER_WRITE_LOGS=false wrangler dev --local --port 7082",
+    "test:worker": "node --test test/search-worker.test.mjs",
+    "test:integration": "node --test integration/*.test.mjs",
+    "test:integration:required": "EBIRD_INTEGRATION_REQUIRE_VALID_KEY=1 node --test integration/*.test.mjs",
+    "test:browser": "npm run build:search && playwright test",
+    "check:all": "npm run check && npm run test:browser",
     "electron:dev": "electron .",
     "electron:pack": "npm run build && electron-builder --dir --publish never",
     "electron:build:mac": "npm run build && electron-builder --mac dmg --publish never",
@@ -32,6 +39,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
@@ -39,7 +47,8 @@
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "wrangler": "^4.121.0"
   },
   "build": {
     "appId": "com.derektu.ebird-tw-tracker",

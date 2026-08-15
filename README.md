@@ -110,6 +110,8 @@ npm run test:browser
 
 `npm run check:all` 執行既有 Desktop check、Worker tests 與 Search App browser tests。
 
+完整的自行部署、production-like preview、更新、桌面／手機驗證與 Cloudflare 用量責任，見 [Cloudflare Search App 部署指南](docs/cloudflare-deployment.md)。使用 browser-owned key 前，請先閱讀 [Search App API key 安全說明](docs/api-key-security.md)。
+
 ### Search App real eBird integration tests
 
 一般 `npm test` 只執行 `test/` 中不連網的測試；它不會執行 `integration/`。Search App 的 Worker 以 eBird 的 [Recent observations in a region](https://documenter.getpostman.com/view/3897235/S1ENwy59) 作為 API key probe，請求固定為 `GET /v2/data/obs/TW/recent?back=1&maxResults=1`。eBird 文件將此 endpoint 標記為需要 `X-eBirdApiToken`。
@@ -225,7 +227,9 @@ docs/       開發與架構文件
 | `npm run check` | 型別、測試及 production build |
 | `npm run build:search` | 建置 Cloudflare Search App 靜態資產 |
 | `npm run dev:cloudflare` | 在 port 7082 啟動本機 Cloudflare Search App preview |
+| `npm run deploy:cloudflare` | 建置並發佈單一 Cloudflare Workers Static Assets deployment |
 | `npm run test:worker` | 驗證 Search App Worker 的 request-to-response contract |
+| `npm run test:search-bundle` | 確認 Search production bundle 不含 Desktop-only runtime code |
 | `npm run test:integration` | 使用 fake key 驗證真實 eBird API 的拒絕路徑；沒有本機 key 時略過 valid path |
 | `npm run test:integration:required` | 要求 `EBIRD_API_KEY` 的真實 eBird valid-path verification |
 | `npm run test:browser` | 驗證 Search App API key gate 的瀏覽器可見流程 |

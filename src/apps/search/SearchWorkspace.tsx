@@ -100,6 +100,7 @@ export function SearchWorkspace() {
   const [searched, setSearched] = useState(false);
   const [sheetState, setSheetState] = useState<"half" | "expanded" | "collapsed">("half");
   const [controlsExpanded, setControlsExpanded] = useState(true);
+  const [publishedDays, setPublishedDays] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
@@ -110,7 +111,7 @@ export function SearchWorkspace() {
   const reopenResultsRef = useRef<HTMLButtonElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const editSearchRef = useRef<HTMLButtonElement>(null);
+  const compactSearchRef = useRef<HTMLButtonElement>(null);
 
   if (!workflowRef.current) {
     const runtime = createSearchAppRuntime({
@@ -138,11 +139,12 @@ export function SearchWorkspace() {
           setObservations(result.observations);
           setComparison(result.comparison ?? null);
           setActiveIndex(result.observations.length ? 0 : -1);
+          setPublishedDays(result.days);
           setSearched(true);
           setSheetState("half");
           setControlsExpanded(false);
           window.requestAnimationFrame(() => {
-            if (window.matchMedia("(max-width: 720px)").matches) editSearchRef.current?.focus();
+            if (window.matchMedia("(max-width: 720px)").matches) compactSearchRef.current?.focus();
           });
           setSuggestions([]);
           setRecentSpecies(recordRecentSpecies(result.species));
@@ -300,27 +302,39 @@ export function SearchWorkspace() {
   return (
     <main className="search-workspace">
       <section
-        className={`search-form-card${!controlsExpanded && species ? " mobile-search-controls-compact" : ""}`}
+        className={`search-form-card${!controlsExpanded ? " mobile-search-controls-compact" : ""}`}
         aria-labelledby="search-workspace-title"
       >
-        {species && (
+        {!controlsExpanded && (
           <div className="mobile-search-toolbar" role="group" aria-label="目前搜尋條件">
-            <span className="mobile-search-species">{species.comName}</span>
-            <span className="mobile-search-days">最近 {days} 天</span>
+            <span className="mobile-search-species">{species?.comName ?? "搜尋條件"}</span>
+            <span className="mobile-search-days">{publishedDays == null ? "尚未搜尋" : `最近 ${publishedDays} 天`}</span>
             <button
               className="search-app-secondary mobile-edit-search-button"
               type="button"
-              ref={editSearchRef}
+              ref={compactSearchRef}
               onClick={() => {
                 setControlsExpanded(true);
                 window.requestAnimationFrame(() => searchInputRef.current?.focus());
               }}
             >
-              修改搜尋
+              {species ? "修改搜尋" : "展開搜尋條件"}
             </button>
           </div>
         )}
-        <p className="search-app-eyebrow">eBird Taiwan Search</p>
+        <div className="mobile-form-heading">
+          <p className="search-app-eyebrow">eBird Taiwan Search</p>
+          <button
+            className="mobile-collapse-search-button"
+            type="button"
+            onClick={() => {
+              setControlsExpanded(false);
+              window.requestAnimationFrame(() => compactSearchRef.current?.focus());
+            }}
+          >
+            收合條件
+          </button>
+        </div>
         <h1 id="search-workspace-title">搜尋台灣鳥種觀察紀錄</h1>
         <form className="search-form" onSubmit={submitSearch}>
           <label className="field species-field" ref={fieldRef}>
@@ -387,7 +401,7 @@ export function SearchWorkspace() {
         {errorMessage && <p className="api-key-error" role="alert">{errorMessage}</p>}
         {species && (
           <p className="search-results-summary">
-            {species.comName}（{species.speciesCode}）最近 {days} 天：{observations.length} 筆有座標紀錄
+            {species.comName}（{species.speciesCode}）最近 {publishedDays} 天：{observations.length} 筆有座標紀錄
           </p>
         )}
         {visibleComparisonMessage && (
@@ -422,6 +436,7 @@ export function SearchWorkspace() {
             </button>
           )}
         </div>
+        {observations.length > 0 && (
         <aside className="side" data-sheet-state={sheetState} aria-label="搜尋結果">
           <div className="bottom-sheet-controls">
             <button
@@ -494,6 +509,7 @@ export function SearchWorkspace() {
             })}
           </ul>
         </aside>
+        )}
       </section>
     </main>
   );

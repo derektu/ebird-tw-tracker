@@ -6,12 +6,12 @@ import { build } from "vite";
 
 const repositoryRoot = resolve();
 const outputDirectory = resolve("dist-search");
-const forbiddenModuleRoots = {
-  Tracker: "src/features/tracking/",
-  events: "src/features/events/",
-  settings: "src/features/settings/",
-  Electron: "electron/",
-  "local Node application": "server/",
+const forbiddenModuleBoundaries = {
+  Tracker: ["src/features/tracking/"],
+  events: ["src/features/events/"],
+  settings: ["src/features/settings/"],
+  Electron: ["electron/"],
+  "local Node application": ["server/", "server.mjs"],
 };
 
 async function readOutputFiles(directory) {
@@ -26,8 +26,8 @@ async function readOutputFiles(directory) {
 function moduleProvenance(moduleIds) {
   return moduleIds.flatMap((moduleId) => {
     const repositoryPath = relative(repositoryRoot, moduleId).replaceAll("\\", "/");
-    return Object.entries(forbiddenModuleRoots)
-      .filter(([, root]) => repositoryPath.startsWith(root))
+    return Object.entries(forbiddenModuleBoundaries)
+      .filter(([, boundaries]) => boundaries.some((boundary) => repositoryPath === boundary || repositoryPath.startsWith(boundary)))
       .map(([category]) => ({ category, repositoryPath }));
   });
 }
@@ -67,10 +67,22 @@ test("Search production build excludes Desktop-only module provenance and source
 });
 
 test("Search module provenance check rejects every forbidden runtime boundary", () => {
-  for (const [category, root] of Object.entries(forbiddenModuleRoots)) {
-    assert.throws(
-      () => assertSearchModuleBoundary([resolve(repositoryRoot, root, "would-be-imported.mjs")]),
-      new RegExp(`Search production module graph imports Desktop-only code: ${category}`),
-    );
+  for (const [category, boundaries] of Object.entries(forbiddenModuleBoundaries)) {
+    for (const boundary of boundaries) {
+      const moduleId = boundary.endsWith("/")
+        ? resolve(repositoryRoot, boundary, "would-be-imported.mjs")
+        : resolve(repositoryRoot, boundary);
+      assert.throws(
+        () => assertSearchModuleBoundary([moduleId]),
+        new RegExp(`Search production module graph imports Desktop-only code: ${category}`),
+      );
+    }
   }
+});
+
+test("Search module provenance check rejects the root local Node entrypoint", () => {
+  assert.throws(
+    () => assertSearchModuleBoundary([resolve(repositoryRoot, "server.mjs")]),
+    /Search production module graph imports Desktop-only code: local Node application/,
+  );
 });

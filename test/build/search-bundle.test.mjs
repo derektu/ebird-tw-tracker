@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import test from "node:test";
+import { build } from "vite";
 
+const repositoryRoot = resolve();
 const outputDirectory = resolve("dist-search");
+const forbiddenModuleRoots = {
+  Tracker: "src/features/tracking/",
+  events: "src/features/events/",
+  settings: "src/features/settings/",
+  Electron: "electron/",
+  "local Node application": "server/",
+};
 
 async function readOutputFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -14,22 +23,54 @@ async function readOutputFiles(directory) {
   return files.flat();
 }
 
-test("Search production bundle stays independent from Desktop-only runtime code", async () => {
+function moduleProvenance(moduleIds) {
+  return moduleIds.flatMap((moduleId) => {
+    const repositoryPath = relative(repositoryRoot, moduleId).replaceAll("\\", "/");
+    return Object.entries(forbiddenModuleRoots)
+      .filter(([, root]) => repositoryPath.startsWith(root))
+      .map(([category]) => ({ category, repositoryPath }));
+  });
+}
+
+function assertSearchModuleBoundary(moduleIds) {
+  const forbiddenModules = moduleProvenance(moduleIds);
+  assert.deepEqual(
+    forbiddenModules,
+    [],
+    `Search production module graph imports Desktop-only code: ${forbiddenModules.map(({ category, repositoryPath }) => `${category} (${repositoryPath})`).join(", ")}`,
+  );
+}
+
+async function collectSearchProductionModuleIds() {
+  const result = await build({
+    configFile: resolve("vite.search.config.ts"),
+    build: { write: false },
+  });
+  const outputs = Array.isArray(result) ? result : [result];
+  return outputs.flatMap((output) => output.output
+    .filter((file) => file.type === "chunk")
+    .flatMap((file) => Object.keys(file.modules)));
+}
+
+test("Search production build excludes Desktop-only module provenance and source maps", async () => {
   const outputFiles = await readOutputFiles(outputDirectory);
   const assets = await Promise.all(outputFiles.map(async (path) => ({ path, body: await readFile(path, "utf8") })));
   const bundle = assets.map(({ body }) => body).join("\n");
+  const moduleIds = await collectSearchProductionModuleIds();
 
   assert.ok(assets.some(({ path }) => path.endsWith("search.html")));
   assert.ok(assets.some(({ path }) => path.endsWith(".js")));
   assert.ok(assets.some(({ path }) => path.endsWith(".css")));
-  for (const desktopOnlyReference of [
-    "TrackerManager",
-    "NotificationCenter",
-    "SettingsFeature",
-    "electron/main",
-    "server/application",
-  ]) {
-    assert.ok(!bundle.includes(desktopOnlyReference), `${desktopOnlyReference} must not enter the Search bundle`);
-  }
+  assertSearchModuleBoundary(moduleIds);
+  assert.ok(!assets.some(({ path }) => path.endsWith(".map")), "production Search assets must not publish source maps");
   assert.ok(!bundle.includes("sourceMappingURL="), "production Search assets must not publish source maps");
+});
+
+test("Search module provenance check rejects every forbidden runtime boundary", () => {
+  for (const [category, root] of Object.entries(forbiddenModuleRoots)) {
+    assert.throws(
+      () => assertSearchModuleBoundary([resolve(repositoryRoot, root, "would-be-imported.mjs")]),
+      new RegExp(`Search production module graph imports Desktop-only code: ${category}`),
+    );
+  }
 });

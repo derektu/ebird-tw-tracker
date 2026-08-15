@@ -5,7 +5,9 @@ import { readBrowserApiKey } from "../../storage/browser-api-key";
 import { createMarkerClassName } from "../../features/map/marker-presentation.mjs";
 import type { Observation, Species } from "../../types/domain";
 import type { SearchWorkflowEvent } from "../../features/search/types";
+import { createChecklistIdentity, type SearchComparison } from "../../domain/search-discovery.mjs";
 import { createSearchAppRuntime } from "./search-app-runtime.mjs";
+import { createIndexedDbSearchSnapshotStore } from "./browser-search-snapshot-store.mjs";
 import { createSearchWorkflow } from "../../features/search/search-workflow.mjs";
 import { readRecentSpecies, recordRecentSpecies } from "./recent-species-store.mjs";
 
@@ -15,12 +17,13 @@ const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
 interface MapEntry {
   marker: Marker;
   observation: Observation;
+  discovery: boolean;
 }
 
-function createMarkerIcon(observation: Observation, active: boolean) {
+function createMarkerIcon(observation: Observation, active: boolean, discovery = false) {
   const size = active ? 34 : 28;
   const marker = document.createElement("div");
-  marker.className = createMarkerClassName({ locationPrivate: observation.locationPrivate, discovery: false, active });
+  marker.className = createMarkerClassName({ locationPrivate: observation.locationPrivate, discovery, active });
   marker.textContent = observation.howMany == null ? "?" : String(observation.howMany);
   return L.divIcon({
     className: "",
@@ -68,6 +71,20 @@ function createPopup(observation: Observation) {
   return popup;
 }
 
+function comparisonMessage(comparison: SearchComparison | null) {
+  if (!comparison) return null;
+  if (comparison.status === "baseline-created") return "已建立搜尋比較基準";
+  if (comparison.status === "unavailable") return "搜尋比較暫時無法使用";
+  const message = comparison.discoveryIds.length
+    ? `新增 ${comparison.discoveryIds.length} 筆紀錄`
+    : "沒有新增紀錄";
+  return comparison.snapshotCommit === "save-failed" ? `${message}；基準未更新` : message;
+}
+
+function comparisonHasWarning(comparison: SearchComparison | null) {
+  return comparison?.status === "unavailable" || (comparison?.status === "compared" && comparison.snapshotCommit === "save-failed");
+}
+
 export function SearchWorkspace() {
   const [query, setQuery] = useState("");
   const [days, setDays] = useState(3);
@@ -78,6 +95,7 @@ export function SearchWorkspace() {
   const [busy, setBusy] = useState(false);
   const [species, setSpecies] = useState<Species | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [comparison, setComparison] = useState<SearchComparison | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -99,6 +117,7 @@ export function SearchWorkspace() {
     });
     workflowRef.current = createSearchWorkflow({
       runtime,
+      snapshots: createIndexedDbSearchSnapshotStore(),
       publish(event: SearchWorkflowEvent) {
         if (event.type === "busy") {
           setBusy(event.busy);
@@ -111,6 +130,7 @@ export function SearchWorkspace() {
           setSelectedSpecies(result.species);
           setQuery(result.species.comName);
           setObservations(result.observations);
+          setComparison(result.comparison ?? null);
           setActiveIndex(result.observations.length ? 0 : -1);
           setSearched(true);
           setSuggestions([]);
@@ -149,7 +169,7 @@ export function SearchWorkspace() {
   const activate = useCallback((index: number, zoomToPoint = false) => {
     const entries = entriesRef.current;
     if (index < 0 || index >= entries.length) return;
-    entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index)));
+    entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index, entry.discovery)));
     setActiveIndex(index);
     listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
@@ -168,12 +188,14 @@ export function SearchWorkspace() {
     const map = mapRef.current;
     if (!map) return;
     entriesRef.current.forEach(({ marker }) => marker.remove());
+    const discoveryIds = new Set(comparison?.discoveryIds ?? []);
     entriesRef.current = observations.map((observation, index) => {
-      const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex) })
+      const discovery = discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId));
+      const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex, discovery) })
         .addTo(map)
         .bindPopup(createPopup(observation));
       marker.on("click", () => activate(index));
-      return { marker, observation };
+      return { marker, observation, discovery };
     });
     listItemsRef.current = [];
     if (observations.length) {
@@ -187,7 +209,7 @@ export function SearchWorkspace() {
     map.closePopup();
     // Selection changes update the active marker's icon directly through
     // activate(); this effect only rebuilds markers when the collection changes.
-  }, [observations, activate]);
+  }, [observations, comparison, activate]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -242,6 +264,8 @@ export function SearchWorkspace() {
   );
 
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
+  const visibleComparisonMessage = comparisonMessage(comparison);
+  const discoveryIds = new Set(comparison?.discoveryIds ?? []);
 
   return (
     <main className="search-workspace">
@@ -315,6 +339,9 @@ export function SearchWorkspace() {
             {species.comName}（{species.speciesCode}）最近 {days} 天：{observations.length} 筆有座標紀錄
           </p>
         )}
+        {visibleComparisonMessage && (
+          <p className={`search-comparison${comparisonHasWarning(comparison) ? " warning" : ""}`}>{visibleComparisonMessage}</p>
+        )}
         {searched && observations.length === 0 && (
           <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>
         )}
@@ -349,6 +376,7 @@ export function SearchWorkspace() {
                   <span>{observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點"}</span>
                   <span>Checklist {observation.subId}</span>
                 </div>
+                {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
                 <div className="observation-actions">
                   <a
                     className="search-app-secondary"

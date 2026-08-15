@@ -169,6 +169,16 @@ button, input { font: inherit; }
 
 .search-results-summary { margin: 0; color: #385043; font-weight: 600; }
 .search-results-empty { margin: 0; color: #627065; }
+.search-comparison {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #bddbcb;
+  border-radius: 8px;
+  background: #eef8f3;
+  color: var(--active);
+  font-size: 13px;
+}
+.search-comparison.warning { border-color: #ead5bb; background: #fff7ec; color: var(--private); }
 
 .workspace {
   flex: 1;
@@ -264,6 +274,16 @@ button, input { font: inherit; }
 
 .observation-actions { display: flex; gap: 10px; }
 .observation-actions a { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.search-discovery-tag {
+  width: fit-content;
+  padding: 2px 6px;
+  border: 1px solid #efd28a;
+  border-radius: 999px;
+  background: #fff8df;
+  color: #8a6100;
+  font-size: 12px;
+  font-weight: 700;
+}
 
 .forget-key-button {
   position: fixed;
@@ -289,6 +309,7 @@ button, input { font: inherit; }
 .bird-marker {
   --marker-fill: var(--accent);
   --marker-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+  --discovery-halo: 0 0 0 0 transparent;
   display: grid;
   place-items: center;
   width: 28px;
@@ -299,10 +320,11 @@ button, input { font: inherit; }
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
-  box-shadow: var(--marker-shadow);
+  box-shadow: var(--discovery-halo), var(--marker-shadow);
 }
 
 .bird-marker.private { --marker-fill: var(--private); }
+.bird-marker.discovery { --discovery-halo: 0 0 0 4px #f4bf4f; }
 
 .bird-marker.active {
   width: 34px;

@@ -22,7 +22,7 @@ const observations = {
 
 const overflowingObservations = {
   ...observations,
-  observations: Array.from({ length: 12 }, (_, index) => ({
+  observations: Array.from({ length: 16 }, (_, index) => ({
     speciesCode: "grpsni1",
     comName: "彩鷸",
     sciName: "Rostratula benghalensis",
@@ -36,6 +36,11 @@ const overflowingObservations = {
     obsValid: true,
     obsReviewed: false,
   })),
+};
+
+const compressedObservations = {
+  ...overflowingObservations,
+  observations: overflowingObservations.observations.slice(0, 10),
 };
 
 async function signInAndSearch(page, observationResponse = observations) {
@@ -145,7 +150,7 @@ test("Pin selection scrolls an overflowing desktop result sidebar to its row", a
   const items = page.locator(".observation-card");
   const markers = page.locator(".bird-marker");
   const target = items.nth(10);
-  await expect(items).toHaveCount(12);
+  await expect(items).toHaveCount(16);
   await markers.nth(10).click({ force: true });
   await expect(target).toHaveClass(/active/);
   await expectVisibleInside(page, ".side", target);
@@ -158,7 +163,7 @@ test("Pin selection scrolls an overflowing mobile half Sheet to its row", async 
   const items = page.locator(".observation-card");
   const markers = page.locator(".bird-marker");
   const target = items.nth(8);
-  await expect(items).toHaveCount(12);
+  await expect(items).toHaveCount(16);
   await markers.nth(8).dispatchEvent("click");
   await expect(target).toHaveClass(/active/);
   await expectVisibleInside(page, ".observation-list", target);
@@ -176,4 +181,34 @@ test("keyboard collapse and reopen retain a nearby focus target", async ({ page 
   await expect(reopen).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(handle).toBeFocused();
+});
+
+async function expectReadableSheetRows(page, observationResponse, count) {
+  await page.setViewportSize({ width: 483, height: 766 });
+  await signInAndSearch(page, observationResponse);
+
+  await expect(page.locator(".observation-card")).toHaveCount(count);
+  const geometry = await page.evaluate(() => {
+    const list = document.querySelector(".observation-list");
+    const cards = Array.from(document.querySelectorAll(".observation-card"));
+    const cardHeights = cards.map((card) => card.getBoundingClientRect().height);
+    const rowsDoNotOverlap = cards.every((card, index) => index === 0 || card.getBoundingClientRect().top >= cards[index - 1].getBoundingClientRect().bottom);
+    return {
+      cardHeights,
+      rowsDoNotOverlap,
+      scrolls: list.scrollHeight > list.clientHeight,
+    };
+  });
+
+  expect(geometry.scrolls).toBe(true);
+  expect(geometry.rowsDoNotOverlap).toBe(true);
+  expect(Math.min(...geometry.cardHeights)).toBeGreaterThanOrEqual(60);
+}
+
+test("reproduces readable intrinsic rows in an overflowing 483px mobile Sheet", async ({ page }) => {
+  await expectReadableSheetRows(page, compressedObservations, 10);
+});
+
+test("keeps the original sixteen-result mobile Sheet readable", async ({ page }) => {
+  await expectReadableSheetRows(page, overflowingObservations, 16);
 });

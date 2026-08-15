@@ -25,7 +25,8 @@ test("a valid key is sent in a same-origin header, stored, and revalidated on re
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
-  await expect(page.getByRole("heading", { name: "Search App 已準備完成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "搜尋" })).toBeVisible();
 
   expect(requests).toHaveLength(1);
   expect(requests[0].url()).not.toContain(apiKey);
@@ -33,7 +34,7 @@ test("a valid key is sent in a same-origin header, stored, and revalidated on re
   await expect.poll(() => page.evaluate(() => localStorage.getItem("ebird-search-api-key"))).toBe(apiKey);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Search App 已準備完成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
   expect(requests).toHaveLength(2);
 });
 

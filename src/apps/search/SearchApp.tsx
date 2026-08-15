@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiKeyValidationError, validateBrowserApiKey } from "../../api/worker-client.mjs";
 import { forgetBrowserApiKey, readBrowserApiKey, saveBrowserApiKey } from "../../storage/browser-api-key";
 import { ApiKeyGate } from "./ApiKeyGate";
+import { SearchWorkspace } from "./SearchWorkspace";
 
 type GateState = "checking" | "gate" | "ready";
 
@@ -69,23 +70,19 @@ export function SearchApp() {
   }
 
   return (
-    <main className="search-app-shell">
-      <section className="api-key-card search-app-ready" aria-labelledby="search-app-ready-title">
-        <p className="search-app-eyebrow">eBird Taiwan Search</p>
-        <h1 id="search-app-ready-title">Search App 已準備完成</h1>
-        <p>你的 API key 已通過驗證。鳥種與 observation 搜尋會在後續功能完成後開放。</p>
-        <button
-          className="search-app-secondary"
-          type="button"
-          onClick={() => {
-            forgetBrowserApiKey();
-            setError(null);
-            setState("gate");
-          }}
-        >
-          忘記 API key
-        </button>
-      </section>
-    </main>
+    <>
+      <SearchWorkspace />
+      <button
+        className="search-app-secondary forget-key-button"
+        type="button"
+        onClick={() => {
+          forgetBrowserApiKey();
+          setError(null);
+          setState("gate");
+        }}
+      >
+        忘記 API key
+      </button>
+    </>
   );
 }

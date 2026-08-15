@@ -98,13 +98,20 @@ export function SearchWorkspace() {
   const [comparison, setComparison] = useState<SearchComparison | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
+  const [sheetState, setSheetState] = useState<"half" | "expanded" | "collapsed">("half");
+  const [controlsExpanded, setControlsExpanded] = useState(true);
+  const [publishedDays, setPublishedDays] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const entriesRef = useRef<MapEntry[]>([]);
+  const sheetHandleRef = useRef<HTMLButtonElement>(null);
+  const reopenResultsRef = useRef<HTMLButtonElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const compactSearchRef = useRef<HTMLButtonElement>(null);
 
   if (!workflowRef.current) {
     const runtime = createSearchAppRuntime({
@@ -132,12 +139,22 @@ export function SearchWorkspace() {
           setObservations(result.observations);
           setComparison(result.comparison ?? null);
           setActiveIndex(result.observations.length ? 0 : -1);
+          setPublishedDays(result.days);
           setSearched(true);
+          setSheetState("half");
+          setControlsExpanded(false);
+          window.requestAnimationFrame(() => {
+            if (window.matchMedia("(max-width: 720px)").matches) compactSearchRef.current?.focus();
+          });
           setSuggestions([]);
           setRecentSpecies(recordRecentSpecies(result.species));
           return;
         }
         setErrorMessage(event.error.message);
+        setControlsExpanded(true);
+        window.requestAnimationFrame(() => {
+          if (window.matchMedia("(max-width: 720px)").matches) searchInputRef.current?.focus();
+        });
       },
     });
   }
@@ -172,7 +189,6 @@ export function SearchWorkspace() {
     if (index < 0 || index >= entries.length) return;
     entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index, entry.discovery)));
     setActiveIndex(index);
-    listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
     if (zoomToPoint) {
       const map = mapRef.current;
@@ -194,10 +210,12 @@ export function SearchWorkspace() {
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex, discovery) })
         .addTo(map)
         .bindPopup(createPopup(observation));
-      marker.on("click", () => activate(index));
+      marker.on("click", () => {
+        setSheetState("half");
+        activate(index);
+      });
       return { marker, observation, discovery };
     });
-    listItemsRef.current = [];
     if (observations.length) {
       // The workspace grows from search-form-only to showing the map and
       // result list here, so the container's on-screen size can change
@@ -210,6 +228,20 @@ export function SearchWorkspace() {
     // Selection changes update the active marker's icon directly through
     // activate(); this effect only rebuilds markers when the collection changes.
   }, [observations, comparison, activate]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const frame = window.requestAnimationFrame(() => mapRef.current?.invalidateSize());
+    return () => window.cancelAnimationFrame(frame);
+  }, [sheetState]);
+
+  useEffect(() => {
+    if (sheetState === "collapsed" || activeIndex < 0) return;
+    const item = listItemsRef.current[activeIndex];
+    if (!item) return;
+    const frame = window.requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeIndex, sheetState]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -255,6 +287,7 @@ export function SearchWorkspace() {
           ? selectedSpecies
           : undefined;
       if (!species && !normalizedQuery) {
+        setControlsExpanded(true);
         setErrorMessage("請輸入鳥種名稱、英文名或 species code");
         return;
       }
@@ -268,8 +301,40 @@ export function SearchWorkspace() {
 
   return (
     <main className="search-workspace">
-      <section className="search-form-card" aria-labelledby="search-workspace-title">
-        <p className="search-app-eyebrow">eBird Taiwan Search</p>
+      <section
+        className={`search-form-card${!controlsExpanded ? " mobile-search-controls-compact" : ""}`}
+        aria-labelledby="search-workspace-title"
+      >
+        {!controlsExpanded && (
+          <div className="mobile-search-toolbar" role="group" aria-label="目前搜尋條件">
+            <span className="mobile-search-species">{species?.comName ?? "搜尋條件"}</span>
+            <span className="mobile-search-days">{publishedDays == null ? "尚未搜尋" : `最近 ${publishedDays} 天`}</span>
+            <button
+              className="search-app-secondary mobile-edit-search-button"
+              type="button"
+              ref={compactSearchRef}
+              onClick={() => {
+                setControlsExpanded(true);
+                window.requestAnimationFrame(() => searchInputRef.current?.focus());
+              }}
+            >
+              {species ? "修改搜尋" : "展開搜尋條件"}
+            </button>
+          </div>
+        )}
+        <div className="mobile-form-heading">
+          <p className="search-app-eyebrow">eBird Taiwan Search</p>
+          <button
+            className="mobile-collapse-search-button"
+            type="button"
+            onClick={() => {
+              setControlsExpanded(false);
+              window.requestAnimationFrame(() => compactSearchRef.current?.focus());
+            }}
+          >
+            收合條件
+          </button>
+        </div>
         <h1 id="search-workspace-title">搜尋台灣鳥種觀察紀錄</h1>
         <form className="search-form" onSubmit={submitSearch}>
           <label className="field species-field" ref={fieldRef}>
@@ -279,6 +344,7 @@ export function SearchWorkspace() {
               value={query}
               autoComplete="off"
               placeholder="輸入中文名、英文名或 species code"
+              ref={searchInputRef}
               disabled={busy}
               onFocus={() => setShowRecent(true)}
               onChange={(event) => {
@@ -335,7 +401,7 @@ export function SearchWorkspace() {
         {errorMessage && <p className="api-key-error" role="alert">{errorMessage}</p>}
         {species && (
           <p className="search-results-summary">
-            {species.comName}（{species.speciesCode}）最近 {days} 天：{observations.length} 筆有座標紀錄
+            {species.comName}（{species.speciesCode}）最近 {publishedDays} 天：{observations.length} 筆有座標紀錄
           </p>
         )}
         {visibleComparisonMessage && (
@@ -356,50 +422,94 @@ export function SearchWorkspace() {
           >
             顯示全台
           </button>
+          {observations.length > 0 && sheetState === "collapsed" && (
+            <button
+              className="reopen-results-button"
+              type="button"
+              ref={reopenResultsRef}
+              onClick={() => {
+                setSheetState("half");
+                window.requestAnimationFrame(() => sheetHandleRef.current?.focus());
+              }}
+            >
+              顯示 {observations.length} 筆結果
+            </button>
+          )}
         </div>
-        <aside className="side">
+        {observations.length > 0 && (
+        <aside className="side" data-sheet-state={sheetState} aria-label="搜尋結果">
+          <div className="bottom-sheet-controls">
+            <button
+              className="sheet-handle"
+              type="button"
+              ref={sheetHandleRef}
+              aria-pressed={sheetState === "expanded"}
+              onClick={() => setSheetState((state) => state === "expanded" ? "half" : "expanded")}
+            >
+              {sheetState === "expanded" ? "縮小結果清單" : "展開結果清單"}
+            </button>
+            <button
+              className="sheet-collapse-button"
+              type="button"
+              aria-label="收合結果清單"
+              onClick={() => {
+                setSheetState("collapsed");
+                window.requestAnimationFrame(() => reopenResultsRef.current?.focus());
+              }}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
           <ul className="observation-list">
-            {observations.map((observation, index) => (
-              <li
-                className={`observation-card${activeIndex === index ? " active" : ""}`}
-                key={`${observation.subId}-${observation.obsDt}`}
-                ref={(node) => { listItemsRef.current[index] = node; }}
-                onClick={() => activate(index, true)}
-              >
-                <div className="observation-title">
-                  <span className="observation-loc-name">{observation.locName}</span>
-                  <span className="observation-count">{observation.howMany ?? "數量未知"}</span>
-                </div>
-                <div className="observation-meta">
-                  <span>{observation.obsDt}</span>
-                  <span>{observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點"}</span>
-                  <span>Checklist {observation.subId}</span>
-                </div>
-                {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
-                <div className="observation-actions">
-                  <a
-                    className="search-app-secondary"
-                    href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => event.stopPropagation()}
+            {observations.map((observation, index) => {
+              const selected = activeIndex === index;
+              return (
+                <li
+                  className={`observation-card${selected ? " active" : ""}`}
+                  key={`${observation.subId}-${observation.obsDt}`}
+                  ref={(node) => { listItemsRef.current[index] = node; }}
+                >
+                  <button
+                    className="observation-select"
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => activate(index, true)}
                   >
-                    Checklist
-                  </a>
-                  <a
-                    className="search-app-secondary"
-                    href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    Google Maps
-                  </a>
-                </div>
-              </li>
-            ))}
+                    <span className="observation-title">
+                      <span className="observation-loc-name">{observation.locName}</span>
+                      <span className="observation-count">{observation.howMany ?? "數量未知"}</span>
+                    </span>
+                    <span className="observation-meta">
+                      <span>{observation.obsDt}</span>
+                      <span>{observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點"}</span>
+                      <span>Checklist {observation.subId}</span>
+                    </span>
+                    {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
+                  </button>
+                  <div className="observation-actions" role="group" aria-label={`${observation.locName} 的外部操作`}>
+                    <a
+                      className="search-app-secondary"
+                      href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      開啟 Checklist
+                    </a>
+                    <a
+                      className="search-app-secondary"
+                      href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Google Maps
+                    </a>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </aside>
+        )}
       </section>
     </main>
   );

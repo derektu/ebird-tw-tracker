@@ -270,3 +270,24 @@ test("Search App visibly distinguishes no discoveries, save warning, and unavail
     await context.close();
   }
 });
+
+test("compact mobile controls retain the zero-coordinate result explanation", async ({ page }) => {
+  await page.setViewportSize({ width: 483, height: 852 });
+  await signIn(page);
+  await stubSearches(page, [observations([])]);
+
+  await search(page);
+  await expect(page.getByRole("button", { name: "修改搜尋" })).toBeVisible();
+  await expect(page.getByText("這個條件沒有找到有座標的公開紀錄。")).toBeVisible();
+});
+
+test("compact mobile controls retain unavailable Search Discovery status", async ({ page }) => {
+  await page.setViewportSize({ width: 483, height: 852 });
+  await failIndexedDbOpen(page, 1);
+  await signIn(page);
+  await stubSearches(page, [observations([firstObservation])]);
+
+  await search(page);
+  await expect(page.getByRole("button", { name: "修改搜尋" })).toBeVisible();
+  await expect(page.getByText("搜尋比較暫時無法使用")).toBeVisible();
+});

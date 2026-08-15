@@ -105,7 +105,8 @@ export function SearchWorkspace() {
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const entriesRef = useRef<MapEntry[]>([]);
-  const listRef = useRef<HTMLUListElement>(null);
+  const sheetHandleRef = useRef<HTMLButtonElement>(null);
+  const reopenResultsRef = useRef<HTMLButtonElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
 
   if (!workflowRef.current) {
@@ -202,7 +203,6 @@ export function SearchWorkspace() {
       });
       return { marker, observation, discovery };
     });
-    listItemsRef.current = [];
     if (observations.length) {
       // The workspace grows from search-form-only to showing the map and
       // result list here, so the container's on-screen size can change
@@ -224,14 +224,9 @@ export function SearchWorkspace() {
 
   useEffect(() => {
     if (sheetState === "collapsed" || activeIndex < 0) return;
-    const list = listRef.current;
     const item = listItemsRef.current[activeIndex];
-    if (!list || !item) return;
-    const frame = window.requestAnimationFrame(() => {
-      list.scrollTo({
-        top: Math.max(0, item.offsetTop - (list.clientHeight - item.offsetHeight) / 2),
-      });
-    });
+    if (!item) return;
+    const frame = window.requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
     return () => window.cancelAnimationFrame(frame);
   }, [activeIndex, sheetState]);
 
@@ -384,7 +379,11 @@ export function SearchWorkspace() {
             <button
               className="reopen-results-button"
               type="button"
-              onClick={() => setSheetState("half")}
+              ref={reopenResultsRef}
+              onClick={() => {
+                setSheetState("half");
+                window.requestAnimationFrame(() => sheetHandleRef.current?.focus());
+              }}
             >
               顯示 {observations.length} 筆結果
             </button>
@@ -395,7 +394,8 @@ export function SearchWorkspace() {
             <button
               className="sheet-handle"
               type="button"
-              aria-expanded={sheetState !== "collapsed"}
+              ref={sheetHandleRef}
+              aria-pressed={sheetState === "expanded"}
               onClick={() => setSheetState((state) => state === "expanded" ? "half" : "expanded")}
             >
               {sheetState === "expanded" ? "縮小結果清單" : "展開結果清單"}
@@ -404,12 +404,15 @@ export function SearchWorkspace() {
               className="sheet-collapse-button"
               type="button"
               aria-label="收合結果清單"
-              onClick={() => setSheetState("collapsed")}
+              onClick={() => {
+                setSheetState("collapsed");
+                window.requestAnimationFrame(() => reopenResultsRef.current?.focus());
+              }}
             >
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <ul className="observation-list" ref={listRef}>
+          <ul className="observation-list">
             {observations.map((observation, index) => {
               const selected = activeIndex === index;
               return (
@@ -435,26 +438,24 @@ export function SearchWorkspace() {
                     </span>
                     {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
                   </button>
-                  {selected && (
-                    <div className="observation-actions" aria-label={`${observation.locName} 的外部操作`}>
-                      <a
-                        className="search-app-secondary"
-                        href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        開啟 Checklist
-                      </a>
-                      <a
-                        className="search-app-secondary"
-                        href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Google Maps
-                      </a>
-                    </div>
-                  )}
+                  <div className="observation-actions" role="group" aria-label={`${observation.locName} 的外部操作`}>
+                    <a
+                      className="search-app-secondary"
+                      href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      開啟 Checklist
+                    </a>
+                    <a
+                      className="search-app-secondary"
+                      href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Google Maps
+                    </a>
+                  </div>
                 </li>
               );
             })}

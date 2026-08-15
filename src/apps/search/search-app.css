@@ -424,6 +424,8 @@ button, input { font: inherit; }
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 
+  .observation-card:not(.active) .observation-actions { display: none; }
+
   .reopen-results-button {
     position: absolute;
     z-index: 500;

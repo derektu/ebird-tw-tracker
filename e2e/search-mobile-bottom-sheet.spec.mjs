@@ -20,7 +20,25 @@ const observations = {
   ],
 };
 
-async function signInAndSearch(page) {
+const overflowingObservations = {
+  ...observations,
+  observations: Array.from({ length: 12 }, (_, index) => ({
+    speciesCode: "grpsni1",
+    comName: "彩鷸",
+    sciName: "Rostratula benghalensis",
+    obsDt: `2026-08-${String(13 - index).padStart(2, "0")} 07:30`,
+    locName: `溢出觀察點 ${index + 1}`,
+    howMany: index + 1,
+    subId: `S379420${String(index).padStart(3, "0")}`,
+    lat: 22.1 + (index % 4) * 0.8,
+    lng: 120.1 + Math.floor(index / 4) * 0.7,
+    locationPrivate: false,
+    obsValid: true,
+    obsReviewed: false,
+  })),
+};
+
+async function signInAndSearch(page, observationResponse = observations) {
   await page.route("**/api/key/validate", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -34,7 +52,7 @@ async function signInAndSearch(page) {
   await page.route("**/api/observations*", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify(observations),
+    body: JSON.stringify(observationResponse),
   }));
 
   await page.goto("/");
@@ -106,4 +124,56 @@ test("mobile Bottom Sheet preserves the full selected result collection through 
     "href",
     "https://www.google.com/maps?q=25.05,121.55",
   );
+});
+
+async function expectVisibleInside(page, containerSelector, item) {
+  const index = await item.evaluate((node) => Array.from(node.parentElement.children).indexOf(node));
+  await expect.poll(() => page.evaluate(({ containerSelector, index }) => {
+    const container = document.querySelector(containerSelector);
+    const item = document.querySelectorAll(".observation-card")[index];
+    if (!container || !item) return false;
+    const containerRect = container.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    return itemRect.top >= containerRect.top && itemRect.bottom <= containerRect.bottom;
+  }, { containerSelector, index })).toBe(true);
+}
+
+test("Pin selection scrolls an overflowing desktop result sidebar to its row", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await signInAndSearch(page, overflowingObservations);
+
+  const items = page.locator(".observation-card");
+  const markers = page.locator(".bird-marker");
+  const target = items.nth(10);
+  await expect(items).toHaveCount(12);
+  await markers.nth(10).click({ force: true });
+  await expect(target).toHaveClass(/active/);
+  await expectVisibleInside(page, ".side", target);
+});
+
+test("Pin selection scrolls an overflowing mobile half Sheet to its row", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAndSearch(page, overflowingObservations);
+
+  const items = page.locator(".observation-card");
+  const markers = page.locator(".bird-marker");
+  const target = items.nth(8);
+  await expect(items).toHaveCount(12);
+  await markers.nth(8).dispatchEvent("click");
+  await expect(target).toHaveClass(/active/);
+  await expectVisibleInside(page, ".observation-list", target);
+});
+
+test("keyboard collapse and reopen retain a nearby focus target", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAndSearch(page);
+  await expect(page.locator(".observation-card")).toHaveCount(2);
+
+  const collapse = page.getByRole("button", { name: "收合結果清單" });
+  const reopen = page.getByRole("button", { name: "顯示 2 筆結果" });
+  const handle = page.getByRole("button", { name: "展開結果清單" });
+  await collapse.press("Enter");
+  await expect(reopen).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(handle).toBeFocused();
 });

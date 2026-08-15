@@ -354,7 +354,11 @@ button, input { font: inherit; }
     padding: 12px;
   }
 
-  .mobile-search-controls-compact > :not(.mobile-search-toolbar) { display: none; }
+  .mobile-search-controls-compact > .search-app-eyebrow,
+  .mobile-search-controls-compact > h1,
+  .mobile-search-controls-compact > .search-form {
+    display: none;
+  }
 
   .mobile-search-controls-compact .mobile-search-toolbar {
     display: flex;

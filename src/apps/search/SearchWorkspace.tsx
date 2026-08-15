@@ -153,7 +153,14 @@ export function SearchWorkspace() {
     setActiveIndex(index);
     listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
-    if (zoomToPoint) mapRef.current?.setView([entry.observation.lat, entry.observation.lng], 13, { animate: true });
+    if (zoomToPoint) {
+      const map = mapRef.current;
+      // Activating from the result list can happen right after the map's
+      // container changed size or visibility, so invalidateSize() keeps
+      // Leaflet's tile grid in sync before panning to the pin.
+      map?.invalidateSize();
+      map?.setView([entry.observation.lat, entry.observation.lng], 13, { animate: true });
+    }
     entry.marker.openPopup();
   }, []);
 
@@ -169,7 +176,14 @@ export function SearchWorkspace() {
       return { marker, observation };
     });
     listItemsRef.current = [];
-    if (observations.length) map.fitBounds(TAIWAN_BOUNDS, { padding: [18, 18] });
+    if (observations.length) {
+      // The workspace grows from search-form-only to showing the map and
+      // result list here, so the container's on-screen size can change
+      // right before this fit. Leaflet only recalculates tile positions
+      // when told to, so nudge it before panning to the new bounds.
+      map.invalidateSize();
+      map.fitBounds(TAIWAN_BOUNDS, { padding: [18, 18] });
+    }
     map.closePopup();
     // Selection changes update the active marker's icon directly through
     // activate(); this effect only rebuilds markers when the collection changes.

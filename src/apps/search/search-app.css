@@ -134,7 +134,9 @@ button, input { font: inherit; }
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 5;
+  /* Leaflet's own panes/controls climb as high as z-index 1000, so the
+     dropdown needs to clear that to stay above the map. */
+  z-index: 1100;
   display: grid;
   gap: 2px;
   max-height: 260px;

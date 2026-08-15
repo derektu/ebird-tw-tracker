@@ -99,6 +99,7 @@ export function SearchWorkspace() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
   const [sheetState, setSheetState] = useState<"half" | "expanded" | "collapsed">("half");
+  const [controlsExpanded, setControlsExpanded] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
@@ -108,6 +109,8 @@ export function SearchWorkspace() {
   const sheetHandleRef = useRef<HTMLButtonElement>(null);
   const reopenResultsRef = useRef<HTMLButtonElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const editSearchRef = useRef<HTMLButtonElement>(null);
 
   if (!workflowRef.current) {
     const runtime = createSearchAppRuntime({
@@ -137,11 +140,19 @@ export function SearchWorkspace() {
           setActiveIndex(result.observations.length ? 0 : -1);
           setSearched(true);
           setSheetState("half");
+          setControlsExpanded(false);
+          window.requestAnimationFrame(() => {
+            if (window.matchMedia("(max-width: 720px)").matches) editSearchRef.current?.focus();
+          });
           setSuggestions([]);
           setRecentSpecies(recordRecentSpecies(result.species));
           return;
         }
         setErrorMessage(event.error.message);
+        setControlsExpanded(true);
+        window.requestAnimationFrame(() => {
+          if (window.matchMedia("(max-width: 720px)").matches) searchInputRef.current?.focus();
+        });
       },
     });
   }
@@ -274,6 +285,7 @@ export function SearchWorkspace() {
           ? selectedSpecies
           : undefined;
       if (!species && !normalizedQuery) {
+        setControlsExpanded(true);
         setErrorMessage("請輸入鳥種名稱、英文名或 species code");
         return;
       }
@@ -287,7 +299,27 @@ export function SearchWorkspace() {
 
   return (
     <main className="search-workspace">
-      <section className="search-form-card" aria-labelledby="search-workspace-title">
+      <section
+        className={`search-form-card${!controlsExpanded && species ? " mobile-search-controls-compact" : ""}`}
+        aria-labelledby="search-workspace-title"
+      >
+        {species && (
+          <div className="mobile-search-toolbar" role="group" aria-label="目前搜尋條件">
+            <span className="mobile-search-species">{species.comName}</span>
+            <span className="mobile-search-days">最近 {days} 天</span>
+            <button
+              className="search-app-secondary mobile-edit-search-button"
+              type="button"
+              ref={editSearchRef}
+              onClick={() => {
+                setControlsExpanded(true);
+                window.requestAnimationFrame(() => searchInputRef.current?.focus());
+              }}
+            >
+              修改搜尋
+            </button>
+          </div>
+        )}
         <p className="search-app-eyebrow">eBird Taiwan Search</p>
         <h1 id="search-workspace-title">搜尋台灣鳥種觀察紀錄</h1>
         <form className="search-form" onSubmit={submitSearch}>
@@ -298,6 +330,7 @@ export function SearchWorkspace() {
               value={query}
               autoComplete="off"
               placeholder="輸入中文名、英文名或 species code"
+              ref={searchInputRef}
               disabled={busy}
               onFocus={() => setShowRecent(true)}
               onChange={(event) => {

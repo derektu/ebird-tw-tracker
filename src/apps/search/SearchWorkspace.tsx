@@ -1,5 +1,5 @@
 import L, { type Map as LeafletMap, type Marker } from "leaflet";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchObservations, resolveSpecies, searchSpecies } from "../../api/search-app-client.mjs";
 import { readBrowserApiKey } from "../../storage/browser-api-key";
 import { createMarkerClassName } from "../../features/map/marker-presentation.mjs";
@@ -142,6 +142,7 @@ export function SearchWorkspace() {
     });
   }
   const workflow = workflowRef.current;
+  const discoveryIds = useMemo(() => new Set(comparison?.discoveryIds ?? []), [comparison]);
 
   useEffect(() => {
     if (!mapNodeRef.current) return;
@@ -188,7 +189,6 @@ export function SearchWorkspace() {
     const map = mapRef.current;
     if (!map) return;
     entriesRef.current.forEach(({ marker }) => marker.remove());
-    const discoveryIds = new Set(comparison?.discoveryIds ?? []);
     entriesRef.current = observations.map((observation, index) => {
       const discovery = discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId));
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex, discovery) })
@@ -265,7 +265,6 @@ export function SearchWorkspace() {
 
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
   const visibleComparisonMessage = comparisonMessage(comparison);
-  const discoveryIds = new Set(comparison?.discoveryIds ?? []);
 
   return (
     <main className="search-workspace">

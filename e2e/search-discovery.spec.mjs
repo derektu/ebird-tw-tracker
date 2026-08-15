@@ -69,6 +69,66 @@ async function failIndexedDbOpen(page, callNumber) {
   }, callNumber);
 }
 
+async function abortIndexedDbWrite(page, writeNumber) {
+  await page.addInitScript((failAt) => {
+    const browserIndexedDb = window.indexedDB;
+    let writes = 0;
+    Object.defineProperty(window, "indexedDB", {
+      configurable: true,
+      value: {
+        open(...args) {
+          const request = browserIndexedDb.open.call(browserIndexedDb, ...args);
+          let wrappedDatabase;
+          return new Proxy(request, {
+            get(target, property) {
+              if (property !== "result") {
+                const value = Reflect.get(target, property, target);
+                return typeof value === "function" ? value.bind(target) : value;
+              }
+              const database = target.result;
+              if (!database) return database;
+              if (!wrappedDatabase) {
+                wrappedDatabase = new Proxy(database, {
+                  get(databaseTarget, databaseProperty) {
+                    if (databaseProperty === "transaction") {
+                      return (...transactionArgs) => {
+                        const transaction = databaseTarget.transaction(...transactionArgs);
+                        if (transactionArgs[1] === "readwrite" && ++writes === failAt) {
+                          queueMicrotask(() => transaction.abort());
+                        }
+                        return transaction;
+                      };
+                    }
+                    const value = Reflect.get(databaseTarget, databaseProperty, databaseTarget);
+                    return typeof value === "function" ? value.bind(databaseTarget) : value;
+                  },
+                });
+              }
+              return wrappedDatabase;
+            },
+          });
+        },
+      },
+    });
+  }, writeNumber);
+}
+
+async function readIndexedDbSnapshot(page, key) {
+  return page.evaluate((snapshotKey) => new Promise((resolve, reject) => {
+    const openRequest = indexedDB.open("ebird-search-snapshots");
+    openRequest.onerror = () => reject(openRequest.error);
+    openRequest.onsuccess = () => {
+      const database = openRequest.result;
+      const transaction = database.transaction("search-snapshots", "readonly");
+      const readRequest = transaction.objectStore("search-snapshots").get(snapshotKey);
+      readRequest.onsuccess = () => resolve(readRequest.result ?? null);
+      readRequest.onerror = () => reject(readRequest.error);
+      transaction.oncomplete = () => database.close();
+      transaction.onerror = () => reject(transaction.error);
+    };
+  }), key);
+}
+
 test("a first Search App search creates a baseline without marking existing results as discoveries", async ({ page }) => {
   await signIn(page);
   await stubSearches(page, [observations([firstObservation])]);
@@ -95,6 +155,21 @@ test("a later Search App search shares one discovery result between list badges 
   await expect(discoveryMarker).toHaveClass(/active/);
 });
 
+test("two browser Search Scopes retain independent IndexedDB baselines", async ({ page }) => {
+  const sevenDayObservation = { ...discoveryObservation, subId: "S7" };
+  await signIn(page);
+  await stubSearches(page, [observations([firstObservation]), observations([sevenDayObservation])]);
+
+  await search(page);
+  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  expect(await readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
+  await page.locator('input[type="number"]').fill("7");
+  await search(page);
+  await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:7")).toMatchObject({ identityIds: ["grpsni1:S7"] });
+
+  await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
+});
+
 test("clearing browser site data makes the next successful Search App search establish a new baseline", async ({ page }) => {
   await signIn(page);
   await stubSearches(page, [observations([firstObservation]), observations([discoveryObservation, firstObservation])]);
@@ -112,49 +187,66 @@ test("clearing browser site data makes the next successful Search App search est
   await expect(page.getByText("新增", { exact: true })).toHaveCount(0);
 });
 
+test("an IndexedDB transaction failure shows ordinary results without a fallback baseline", async ({ page }) => {
+  await abortIndexedDbWrite(page, 1);
+  await signIn(page);
+  await stubSearches(page, [observations([firstObservation])]);
+
+  await search(page);
+
+  await expect(page.getByText("搜尋比較暫時無法使用")).toBeVisible();
+  await expect(page.getByText("基準地點")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("snapshot")))).toEqual([]);
+});
+
 test("a stale browser search cannot replace the latest Search App result or baseline", async ({ page }) => {
-  const newerSpecies = { speciesCode: "yebgre1", comName: "小白鷺", sciName: "Egretta garzetta" };
-  const newerObservation = { ...discoveryObservation, speciesCode: newerSpecies.speciesCode, comName: newerSpecies.comName, locName: "最新結果", subId: "NEW" };
+  const newerObservation = { ...discoveryObservation, locName: "最新結果", subId: "NEW" };
   let releaseOlderResponse;
   let olderObservationRequested;
+  let observationCalls = 0;
   const olderRequested = new Promise((resolve) => { olderObservationRequested = resolve; });
 
   await signIn(page);
-  await page.route("**/api/species/resolve*", (route) => {
-    const query = new URL(route.request().url()).searchParams.get("query");
-    const resolved = query === "小白鷺" ? newerSpecies : species;
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ species: resolved, candidates: [resolved] }) });
-  });
+  await page.route("**/api/species/resolve*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ species, candidates: [species] }),
+  }));
   await page.route("**/api/observations*", async (route) => {
-    if (!releaseOlderResponse) {
+    const call = observationCalls++;
+    if (call === 0) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(observations([firstObservation])) });
+      return;
+    }
+    if (call === 1) {
       olderObservationRequested();
       await new Promise((resolve) => { releaseOlderResponse = resolve; });
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(observations([firstObservation])) }).catch(() => {});
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(observations([discoveryObservation])) }).catch(() => {});
       return;
     }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ ...observations([newerObservation]), speciesCode: newerSpecies.speciesCode }),
+      body: JSON.stringify(observations([newerObservation])),
     });
   });
 
   await search(page);
+  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  expect(await readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
+  await search(page);
   await olderRequested;
-  await page.getByPlaceholder("輸入中文名、英文名或 species code").evaluate((input) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-    setter.call(input, "小白鷺");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  const daysField = page.locator('input[type="number"]');
+  await daysField.evaluate((input) => { input.disabled = false; });
+  await daysField.fill("7");
   await page.waitForTimeout(0);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").evaluate((input) => {
     input.closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
 
   await expect(page.getByText("最新結果")).toBeVisible();
+  await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:7")).toMatchObject({ identityIds: ["grpsni1:NEW"] });
   releaseOlderResponse();
   await expect(page.getByText("基準地點")).toHaveCount(0);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
 });
 
 test("Search App visibly distinguishes no discoveries, save warning, and unavailable comparison", async ({ browser }) => {

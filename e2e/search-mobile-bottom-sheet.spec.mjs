@@ -75,14 +75,20 @@ test("mobile Bottom Sheet preserves the full selected result collection through 
   await page.getByRole("button", { name: "縮小結果清單" }).click();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
 
+  await items.nth(1).getByRole("button").click();
+  await expect(items.nth(1)).toHaveClass(/active/);
+  await expect(markers.nth(1)).toHaveClass(/active/);
+
   await page.getByRole("button", { name: "收合結果清單" }).click();
   await expect(sheet).toHaveAttribute("data-sheet-state", "collapsed");
+  await expect(sheet).toBeHidden();
   await expect(page.getByRole("button", { name: "顯示 2 筆結果" })).toBeVisible();
 
   await page.getByRole("button", { name: "顯示 2 筆結果" }).click();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+  await expect(sheet).toBeVisible();
   await expect(items).toHaveCount(2);
-  await expect(items.nth(0)).toHaveClass(/active/);
+  await expect(items.nth(1)).toHaveClass(/active/);
 
   await page.getByRole("button", { name: "收合結果清單" }).click();
   await markers.nth(1).click();

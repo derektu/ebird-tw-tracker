@@ -170,13 +170,11 @@ export function SearchWorkspace() {
     };
   }, []);
 
-  const activate = useCallback((index: number, zoomToPoint = false, source: "list" | "pin" = "list") => {
+  const activate = useCallback((index: number, zoomToPoint = false) => {
     const entries = entriesRef.current;
     if (index < 0 || index >= entries.length) return;
     entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index, entry.discovery)));
     setActiveIndex(index);
-    if (source === "pin") setSheetState("half");
-    listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
     if (zoomToPoint) {
       const map = mapRef.current;
@@ -198,7 +196,10 @@ export function SearchWorkspace() {
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex, discovery) })
         .addTo(map)
         .bindPopup(createPopup(observation));
-      marker.on("click", () => activate(index, false, "pin"));
+      marker.on("click", () => {
+        setSheetState("half");
+        activate(index);
+      });
       return { marker, observation, discovery };
     });
     listItemsRef.current = [];
@@ -405,7 +406,7 @@ export function SearchWorkspace() {
               aria-label="收合結果清單"
               onClick={() => setSheetState("collapsed")}
             >
-              收合結果清單
+              <span aria-hidden="true">×</span>
             </button>
           </div>
           <ul className="observation-list" ref={listRef}>

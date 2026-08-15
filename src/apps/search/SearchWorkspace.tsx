@@ -98,12 +98,14 @@ export function SearchWorkspace() {
   const [comparison, setComparison] = useState<SearchComparison | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
+  const [sheetState, setSheetState] = useState<"half" | "expanded" | "collapsed">("half");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
   const workflowRef = useRef<ReturnType<typeof createSearchWorkflow> | null>(null);
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const entriesRef = useRef<MapEntry[]>([]);
+  const listRef = useRef<HTMLUListElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
 
   if (!workflowRef.current) {
@@ -133,6 +135,7 @@ export function SearchWorkspace() {
           setComparison(result.comparison ?? null);
           setActiveIndex(result.observations.length ? 0 : -1);
           setSearched(true);
+          setSheetState("half");
           setSuggestions([]);
           setRecentSpecies(recordRecentSpecies(result.species));
           return;
@@ -167,11 +170,12 @@ export function SearchWorkspace() {
     };
   }, []);
 
-  const activate = useCallback((index: number, zoomToPoint = false) => {
+  const activate = useCallback((index: number, zoomToPoint = false, source: "list" | "pin" = "list") => {
     const entries = entriesRef.current;
     if (index < 0 || index >= entries.length) return;
     entries.forEach((entry, entryIndex) => entry.marker.setIcon(createMarkerIcon(entry.observation, entryIndex === index, entry.discovery)));
     setActiveIndex(index);
+    if (source === "pin") setSheetState("half");
     listItemsRef.current[index]?.scrollIntoView({ block: "nearest" });
     const entry = entries[index];
     if (zoomToPoint) {
@@ -194,7 +198,7 @@ export function SearchWorkspace() {
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === activeIndex, discovery) })
         .addTo(map)
         .bindPopup(createPopup(observation));
-      marker.on("click", () => activate(index));
+      marker.on("click", () => activate(index, false, "pin"));
       return { marker, observation, discovery };
     });
     listItemsRef.current = [];
@@ -210,6 +214,25 @@ export function SearchWorkspace() {
     // Selection changes update the active marker's icon directly through
     // activate(); this effect only rebuilds markers when the collection changes.
   }, [observations, comparison, activate]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const frame = window.requestAnimationFrame(() => mapRef.current?.invalidateSize());
+    return () => window.cancelAnimationFrame(frame);
+  }, [sheetState]);
+
+  useEffect(() => {
+    if (sheetState === "collapsed" || activeIndex < 0) return;
+    const list = listRef.current;
+    const item = listItemsRef.current[activeIndex];
+    if (!list || !item) return;
+    const frame = window.requestAnimationFrame(() => {
+      list.scrollTo({
+        top: Math.max(0, item.offsetTop - (list.clientHeight - item.offsetHeight) / 2),
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeIndex, sheetState]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -356,48 +379,84 @@ export function SearchWorkspace() {
           >
             顯示全台
           </button>
+          {observations.length > 0 && sheetState === "collapsed" && (
+            <button
+              className="reopen-results-button"
+              type="button"
+              onClick={() => setSheetState("half")}
+            >
+              顯示 {observations.length} 筆結果
+            </button>
+          )}
         </div>
-        <aside className="side">
-          <ul className="observation-list">
-            {observations.map((observation, index) => (
-              <li
-                className={`observation-card${activeIndex === index ? " active" : ""}`}
-                key={`${observation.subId}-${observation.obsDt}`}
-                ref={(node) => { listItemsRef.current[index] = node; }}
-                onClick={() => activate(index, true)}
-              >
-                <div className="observation-title">
-                  <span className="observation-loc-name">{observation.locName}</span>
-                  <span className="observation-count">{observation.howMany ?? "數量未知"}</span>
-                </div>
-                <div className="observation-meta">
-                  <span>{observation.obsDt}</span>
-                  <span>{observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點"}</span>
-                  <span>Checklist {observation.subId}</span>
-                </div>
-                {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
-                <div className="observation-actions">
-                  <a
-                    className="search-app-secondary"
-                    href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => event.stopPropagation()}
+        <aside className="side" data-sheet-state={sheetState} aria-label="搜尋結果">
+          <div className="bottom-sheet-controls">
+            <button
+              className="sheet-handle"
+              type="button"
+              aria-expanded={sheetState !== "collapsed"}
+              onClick={() => setSheetState((state) => state === "expanded" ? "half" : "expanded")}
+            >
+              {sheetState === "expanded" ? "縮小結果清單" : "展開結果清單"}
+            </button>
+            <button
+              className="sheet-collapse-button"
+              type="button"
+              aria-label="收合結果清單"
+              onClick={() => setSheetState("collapsed")}
+            >
+              收合結果清單
+            </button>
+          </div>
+          <ul className="observation-list" ref={listRef}>
+            {observations.map((observation, index) => {
+              const selected = activeIndex === index;
+              return (
+                <li
+                  className={`observation-card${selected ? " active" : ""}`}
+                  key={`${observation.subId}-${observation.obsDt}`}
+                  ref={(node) => { listItemsRef.current[index] = node; }}
+                >
+                  <button
+                    className="observation-select"
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => activate(index, true)}
                   >
-                    Checklist
-                  </a>
-                  <a
-                    className="search-app-secondary"
-                    href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    Google Maps
-                  </a>
-                </div>
-              </li>
-            ))}
+                    <span className="observation-title">
+                      <span className="observation-loc-name">{observation.locName}</span>
+                      <span className="observation-count">{observation.howMany ?? "數量未知"}</span>
+                    </span>
+                    <span className="observation-meta">
+                      <span>{observation.obsDt}</span>
+                      <span>{observation.locationPrivate ? "自訂地點" : "公開熱點或公開地點"}</span>
+                      <span>Checklist {observation.subId}</span>
+                    </span>
+                    {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <span className="search-discovery-tag">新增</span>}
+                  </button>
+                  {selected && (
+                    <div className="observation-actions" aria-label={`${observation.locName} 的外部操作`}>
+                      <a
+                        className="search-app-secondary"
+                        href={`https://ebird.org/checklist/${encodeURIComponent(observation.subId)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        開啟 Checklist
+                      </a>
+                      <a
+                        className="search-app-secondary"
+                        href={`https://www.google.com/maps?q=${observation.lat},${observation.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Google Maps
+                      </a>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </aside>
       </section>

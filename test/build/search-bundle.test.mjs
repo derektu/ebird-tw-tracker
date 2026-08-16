@@ -66,6 +66,66 @@ test("Search production build excludes Desktop-only module provenance and source
   assert.ok(!bundle.includes("sourceMappingURL="), "production Search assets must not publish source maps");
 });
 
+test("Search production build emits resolvable home-screen metadata and icon assets", async () => {
+  const outputFiles = await readOutputFiles(outputDirectory);
+  const outputPaths = new Set(outputFiles.map((path) => relative(outputDirectory, path).replaceAll("\\", "/")));
+  const html = await readFile(join(outputDirectory, "search.html"), "utf8");
+  const manifest = JSON.parse(await readFile(join(outputDirectory, "search.webmanifest"), "utf8"));
+
+  assert.match(html, /<link rel="manifest" href="\/search\.webmanifest"/);
+  assert.match(html, /<link rel="apple-touch-icon" sizes="180x180" href="\/icons\/search-apple-touch-icon\.png"/);
+  assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="\/icons\/search-icon\.svg"/);
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="\/icons\/search-icon-32\.png"/);
+  assert.deepEqual(
+    manifest,
+    {
+      id: "/",
+      name: "eBird Taiwan Search",
+      short_name: "eBird Taiwan Search",
+      start_url: "/",
+      display: "standalone",
+      theme_color: "#123d2c",
+      background_color: "#123d2c",
+      icons: [
+        {
+          src: "/icons/search-icon-192.png",
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any maskable",
+        },
+        {
+          src: "/icons/search-icon-512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any maskable",
+        },
+      ],
+    },
+  );
+
+  for (const iconPath of [
+    "icons/search-apple-touch-icon.png",
+    "icons/search-icon.svg",
+    "icons/search-icon-32.png",
+    "icons/search-icon-192.png",
+    "icons/search-icon-512.png",
+  ]) {
+    assert.ok(outputPaths.has(iconPath), `production build is missing ${iconPath}`);
+  }
+
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  for (const iconPath of [
+    "icons/search-apple-touch-icon.png",
+    "icons/search-icon-32.png",
+    "icons/search-icon-192.png",
+    "icons/search-icon-512.png",
+  ]) {
+    const icon = await readFile(join(outputDirectory, iconPath));
+    assert.deepEqual(icon.subarray(0, pngSignature.length), pngSignature, `${iconPath} must be a PNG`);
+  }
+  assert.match(await readFile(join(outputDirectory, "icons/search-icon.svg"), "utf8"), /<svg\b/);
+});
+
 test("Search module provenance check rejects every forbidden runtime boundary", () => {
   for (const [category, boundaries] of Object.entries(forbiddenModuleBoundaries)) {
     for (const boundary of boundaries) {

@@ -46,6 +46,10 @@ npm run dev:cloudflare
 
 這些手動步驟使用真實 key。不要把 key 放入 shell history、畫面錄影、問題回報或 CI log。
 
+## Home-screen icon verification
+
+Search App 的 manifest、Apple touch icon 和 browser favicon 都從同一個 `dist-search/` Static Assets deployment 提供。部署到 HTTPS URL 後，依照 [Search App home-screen icon](./search-app-home-screen-icon.md) 的 iOS Safari 與 Android Chromium 步驟，確認加入主畫面的名稱、icon 與啟動網址。
+
 ## 自動驗證
 
 提交前，執行完整的本機驗證：

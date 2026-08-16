@@ -1,0 +1,23 @@
+{
+  "id": "/",
+  "name": "eBird Taiwan Search",
+  "short_name": "eBird Taiwan Search",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#123d2c",
+  "background_color": "#123d2c",
+  "icons": [
+    {
+      "src": "/icons/search-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/search-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -18,6 +18,7 @@
     "dev:cloudflare": "XDG_CONFIG_HOME=.wrangler-config WRANGLER_WRITE_LOGS=false wrangler dev --local --port 7082",
     "deploy:cloudflare": "npm run build:search && wrangler deploy",
     "test:worker": "node --test test/search-worker.test.mjs",
+    "generate:search-icons": "node scripts/generate-search-app-icons.mjs",
     "test:search-bundle": "node --test test/build/search-bundle.test.mjs",
     "test:integration": "node --test integration/*.test.mjs",
     "test:integration:required": "EBIRD_INTEGRATION_REQUIRE_VALID_KEY=1 node --test integration/*.test.mjs",

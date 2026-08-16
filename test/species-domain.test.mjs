@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { searchTaxonomy } from "../server/domain/species.mjs";
+import { resolveTaxonomyMatch, searchTaxonomy } from "../server/domain/species.mjs";
 import { mapObservations } from "../server/domain/observations.mjs";
 
 const taxonomy = [
@@ -28,6 +28,30 @@ test("searchTaxonomy excludes non-species, non-issf categories such as hybrids",
 
 test("searchTaxonomy returns an empty list for a blank query", () => {
   assert.deepEqual(searchTaxonomy(taxonomy, "   "), []);
+});
+
+test("resolveTaxonomyMatch resolves to the exact match when one exists", () => {
+  const result = resolveTaxonomyMatch(taxonomy, "磯鷸");
+  assert.equal(result.species.speciesCode, "comsan");
+  assert.deepEqual(result.candidates.map((species) => species.speciesCode), ["comsan", "issfsp1"]);
+});
+
+test("resolveTaxonomyMatch resolves to the first prefix match when there is no exact match", () => {
+  const result = resolveTaxonomyMatch(taxonomy, "grpsni");
+  assert.equal(result.species.speciesCode, "grpsni1");
+});
+
+test("resolveTaxonomyMatch does not resolve a query that only matches as a substring", () => {
+  const result = resolveTaxonomyMatch(taxonomy, "鷸");
+  assert.equal(result.species, null);
+  assert.deepEqual(
+    result.candidates.map((species) => species.speciesCode).sort(),
+    ["comsan", "grpsni1", "issfsp1"].sort(),
+  );
+});
+
+test("resolveTaxonomyMatch returns no species and no candidates for a blank query", () => {
+  assert.deepEqual(resolveTaxonomyMatch(taxonomy, "   "), { species: null, candidates: [] });
 });
 
 test("mapObservations keeps only records with finite coordinates, newest first", () => {

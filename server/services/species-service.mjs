@@ -1,4 +1,4 @@
-import { normalizeSpecies, searchTaxonomy } from "../domain/species.mjs";
+import { normalizeSpecies, resolveTaxonomyMatch, searchTaxonomy } from "../domain/species.mjs";
 import { readJson, writeJson } from "../storage/json-store.mjs";
 
 export function createSpeciesService({ ebird, savedSpeciesPath, taxonomyCachePath, now = () => new Date() }) {
@@ -31,8 +31,7 @@ export function createSpeciesService({ ebird, savedSpeciesPath, taxonomyCachePat
   }
 
   async function resolve(query) {
-    const candidates = await search(query);
-    const species = candidates[0] ?? null;
+    const { species, candidates } = resolveTaxonomyMatch(await taxonomy(), query);
     if (species) await save(species);
     return { species, candidates };
   }

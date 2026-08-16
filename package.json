@@ -65,6 +65,7 @@
       "dist/**",
       "electron/**",
       "server/**",
+      "src/domain/**",
       "package.json"
     ],
     "mac": {

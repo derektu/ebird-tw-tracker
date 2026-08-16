@@ -51,15 +51,15 @@ export function searchTaxonomy(taxonomy, query, limit = 20) {
 
 /**
  * Resolve a query to a single species only when the match is unambiguous
- * enough to act on: an exact match, or otherwise a prefix match. A query
- * that matches only as a substring returns no resolved species, since a
- * short or partial query can substring-match an unrelated bird. The full
- * ranked candidate list is always returned for the caller to offer as
- * suggestions.
+ * enough to act on: an exact match, or otherwise a single, unique prefix
+ * match. A query that matches only as a substring, or that prefix-matches
+ * more than one species, returns no resolved species, since a short or
+ * partial query can otherwise pick an unrelated bird. The full ranked
+ * candidate list is always returned for the caller to offer as suggestions.
  */
 export function resolveTaxonomyMatch(taxonomy, query, limit = 20) {
   const { exact, startsWith, contains } = rankTaxonomy(taxonomy, query);
-  const species = exact[0] ?? startsWith[0] ?? null;
+  const species = exact[0] ?? (startsWith.length === 1 ? startsWith[0] : null);
   const candidates = [...exact, ...startsWith, ...contains].slice(0, limit);
   return { species, candidates };
 }

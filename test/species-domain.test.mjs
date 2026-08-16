@@ -41,6 +41,15 @@ test("resolveTaxonomyMatch resolves to the first prefix match when there is no e
   assert.equal(result.species.speciesCode, "grpsni1");
 });
 
+test("resolveTaxonomyMatch does not resolve an ambiguous prefix match", () => {
+  const result = resolveTaxonomyMatch(taxonomy, "actitis");
+  assert.equal(result.species, null);
+  assert.deepEqual(
+    result.candidates.map((species) => species.speciesCode).sort(),
+    ["comsan", "issfsp1"].sort(),
+  );
+});
+
 test("resolveTaxonomyMatch does not resolve a query that only matches as a substring", () => {
   const result = resolveTaxonomyMatch(taxonomy, "鷸");
   assert.equal(result.species, null);

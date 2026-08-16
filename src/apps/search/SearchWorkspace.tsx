@@ -139,6 +139,16 @@ export function SearchWorkspace() {
           return;
         }
         setErrorMessage(event.error.message);
+        if (event.error.source === "explicit" && event.error.phase === "species-resolution") {
+          setSpecies(null);
+          setSelectedSpecies(null);
+          setObservations([]);
+          setComparison(null);
+          setActiveIndex(-1);
+          setSearched(false);
+          setSheetState("half");
+          setPublishedDays(null);
+        }
         setControlsExpanded(true);
         window.requestAnimationFrame(() => {
           if (window.matchMedia("(max-width: 720px)").matches) searchInputRef.current?.focus();

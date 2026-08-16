@@ -32,6 +32,7 @@ export function createDesktopSearchRuntime({
       if (!query) throw new Error("請輸入鳥種名稱或 species code");
       const resolved = await resolveSpecies(query);
       if (!resolved) throw new Error(`找不到 eBird 鳥種：${query}`);
+      lifecycle.markSpeciesResolved?.();
       const saved = await fetchSavedSpecies();
       if (lifecycle.isCurrent()) publishSavedSpecies(saved);
       return resolved;

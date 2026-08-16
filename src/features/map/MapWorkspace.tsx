@@ -2,7 +2,7 @@ import L, { type Map as LeafletMap, type Marker } from "leaflet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
-import type { SearchRequest, SearchResult } from "../search/types";
+import type { SearchFailedEvent, SearchRequest, SearchResult } from "../search/types";
 import { createChecklistIdentity, createSearchScope } from "../../domain/search-discovery.mjs";
 import type { SearchComparison } from "../../domain/search-discovery.mjs";
 import { presentSearchComparison } from "../../domain/search-comparison-presentation.mjs";
@@ -149,6 +149,7 @@ export function MapWorkspace() {
   const [comparison, setComparison] = useState<SearchComparison | undefined>(undefined);
   const [comparisonScopeKey, setComparisonScopeKey] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [hasPublishedResult, setHasPublishedResult] = useState(false);
 
   const loadObserverName = useCallback((subId: string) => {
     const cache = observerCacheRef.current;
@@ -219,11 +220,25 @@ export function MapWorkspace() {
       observationsRef.current = nextObservations;
       setSpecies(result.species);
       setObservations(nextObservations);
+      setHasPublishedResult(true);
       if (result.source !== "notification-focus") {
         setComparison(result.comparison);
         setComparisonScopeKey(createSearchScope(result.species.speciesCode, result.days).key);
       }
       setActiveIndex(nextObservations.length ? 0 : -1);
+    };
+    const handleFailedSearch = (event: Event) => {
+      const failure = (event as CustomEvent<SearchFailedEvent["error"]>).detail;
+      if (failure.source !== "explicit" || failure.phase !== "species-resolution") return;
+
+      speciesRef.current = null;
+      observationsRef.current = [];
+      setSpecies(null);
+      setObservations([]);
+      setComparison(undefined);
+      setComparisonScopeKey(null);
+      setActiveIndex(-1);
+      setHasPublishedResult(false);
     };
     const handleTrackers = (event: Event) => {
       trackersRef.current = (event as CustomEvent<{ trackers: Tracker[] }>).detail.trackers;
@@ -266,10 +281,12 @@ export function MapWorkspace() {
       }
     };
     window.addEventListener("search:results", handleResults);
+    window.addEventListener("search:failed", handleFailedSearch);
     window.addEventListener("tracking:updated", handleTrackers);
     window.addEventListener("notification:selected", handleNotification);
     return () => {
       window.removeEventListener("search:results", handleResults);
+      window.removeEventListener("search:failed", handleFailedSearch);
       window.removeEventListener("tracking:updated", handleTrackers);
       window.removeEventListener("notification:selected", handleNotification);
     };
@@ -377,49 +394,51 @@ export function MapWorkspace() {
         )}
       </section>
 
-      <aside className="side">
-        <section className="summary">
-          <div className="metric result-count">
-            <strong>{observations.length}</strong>
-            <span>紀錄</span>
-            {comparisonPresentation.compactText && (
-              <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
-                {comparisonPresentation.compactText}
-              </span>
+      {hasPublishedResult && (
+        <aside className="side">
+          <section className="summary">
+            <div className="metric result-count">
+              <strong>{observations.length}</strong>
+              <span>紀錄</span>
+              {comparisonPresentation.compactText && (
+                <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
+                  {comparisonPresentation.compactText}
+                </span>
+              )}
+            </div>
+            <div className="metric"><strong>{birdCount}</strong><span>隻數合計</span></div>
+            <div className="metric"><strong>{privateCount}</strong><span>自訂地點</span></div>
+          </section>
+          <section className="current">
+            <strong>{species?.comName ?? "鳥種"}</strong>
+            <span>{species?.speciesCode ?? ""}</span>
+          </section>
+          {comparisonPresentation.assistiveStatus && (
+            <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
+          )}
+          {comparisonPresentation.warningText && (
+            <div className="comparison warning" role="alert">{comparisonPresentation.warningText}</div>
+          )}
+          <div className="list">
+            {observations.length ? observations.map((observation, index) => (
+              <button
+                className={`item${activeIndex === index ? " active" : ""}`}
+                type="button"
+                key={`${observation.subId}-${observation.obsDt}-${index}`}
+                ref={(node) => { listItemsRef.current[index] = node; }}
+                onClick={() => activate(index, true)}
+              >
+                <div className="item-title"><span>{observation.locName}</span><span>{observation.howMany ?? "?"}</span></div>
+                <div className="item-meta">{observation.obsDt} / {observation.subId}</div>
+                {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <div className="tag discovery">新增</div>}
+                {observation.locationPrivate && <div className="tag">自訂地點</div>}
+              </button>
+            )) : (
+              <div className="empty">這個條件沒有找到有座標的公開紀錄。</div>
             )}
           </div>
-          <div className="metric"><strong>{birdCount}</strong><span>隻數合計</span></div>
-          <div className="metric"><strong>{privateCount}</strong><span>自訂地點</span></div>
-        </section>
-        <section className="current">
-          <strong>{species?.comName ?? "鳥種"}</strong>
-          <span>{species?.speciesCode ?? ""}</span>
-        </section>
-        {comparisonPresentation.assistiveStatus && (
-          <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
-        )}
-        {comparisonPresentation.warningText && (
-          <div className="comparison warning" role="alert">{comparisonPresentation.warningText}</div>
-        )}
-        <div className="list">
-          {observations.length ? observations.map((observation, index) => (
-            <button
-              className={`item${activeIndex === index ? " active" : ""}`}
-              type="button"
-              key={`${observation.subId}-${observation.obsDt}-${index}`}
-              ref={(node) => { listItemsRef.current[index] = node; }}
-              onClick={() => activate(index, true)}
-            >
-              <div className="item-title"><span>{observation.locName}</span><span>{observation.howMany ?? "?"}</span></div>
-              <div className="item-meta">{observation.obsDt} / {observation.subId}</div>
-              {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <div className="tag discovery">新增</div>}
-              {observation.locationPrivate && <div className="tag">自訂地點</div>}
-            </button>
-          )) : (
-            <div className="empty">這個條件沒有找到有座標的公開紀錄。</div>
-          )}
-        </div>
-      </aside>
+        </aside>
+      )}
     </main>
   );
 }

@@ -36,7 +36,7 @@ Search Scope 由下列搜尋條件組成：
 
 每個 Search Scope 只保留最近一次成功提交的 Search Snapshot：
 
-- 沒有 Search Baseline 時，成功保存本次 snapshot，摘要顯示「已建立比較基準」，所有結果以一般紀錄呈現。
+- 沒有 Search Baseline 時，成功保存本次 snapshot。所有結果以一般紀錄呈現，並依顯示規則提供比較基準已建立的回饋。
 - 存在 Search Baseline 時，本次存在而 baseline 不存在的 identity 是 Search Discovery。
 - 合法且完整的空結果是一次成功搜尋，會成為下一次的 Search Baseline。
 - 每次成功提交以完整的本次 identity 集合取代該 scope 的舊 snapshot，不累積 lifetime seen 集合，也不保留歷史版本。
@@ -61,9 +61,9 @@ snapshot 只包含 Search Scope、搜尋時間與去重後的 observation identi
 
 儲存失敗不得阻止一般搜尋結果顯示：
 
-- 已讀取 Search Baseline 並完成比較，但新 snapshot 寫入失敗時，畫面保留本次 Search Discovery，並警告「比較基準未更新；下次可能重複顯示」。
-- 沒有 Search Baseline 且首次 snapshot 寫入失敗時，畫面顯示一般搜尋結果與「無法建立比較基準」。
-- baseline 讀取失敗時，畫面顯示一般搜尋結果與「無法使用搜尋比較」，不把本次結果寫成推測性的替代 baseline。
+- 已讀取 Search Baseline 並完成比較，但新 snapshot 寫入失敗時，畫面保留本次 Search Discovery，並顯示「比較基準未更新；下次可能重複顯示新增紀錄。」。
+- 沒有 Search Baseline 且首次 snapshot 寫入失敗時，畫面顯示一般搜尋結果與「無法建立搜尋比較基準；已顯示一般搜尋結果。」。
+- baseline 讀取失敗時，畫面顯示一般搜尋結果與「無法使用搜尋比較；已顯示一般搜尋結果。」，不把本次結果寫成推測性的替代 baseline。
 
 應用程式不提供查看、重設、刪除、匯出或同步 baseline 的管理介面。使用者刪除對應 app 或網站資料後，下一次搜尋會重新建立 baseline。
 
@@ -76,13 +76,15 @@ snapshot 只包含 Search Scope、搜尋時間與去重後的 observation identi
 
 每一組內部維持 observation service 回傳的時間順序。清單項目以文字 `新增` badge 標示 Search Discovery；對應 marker 使用額外的外框或 halo。新增、地點類型、目前選取與鳥隻數量是互相獨立的視覺維度，任一狀態不得覆蓋其他狀態。
 
-搜尋摘要具有五種可區分狀態：
+搜尋摘要具有五種可區分狀態，Desktop 與 Search App 使用相同的文字與嚴重程度：
 
-- 首次保存成功：`已建立比較基準`
-- 完成比較且有 discovery：`新增 N 筆`
-- 完成比較且沒有 discovery：`沒有新增紀錄`
-- 完成比較但保存失敗：顯示 discovery 結果及 baseline 未更新警告
-- 無 baseline 且無法保存，或 baseline 無法讀取：`無法使用搜尋比較；已顯示一般搜尋結果`
+1. **首次保存成功**：結果正常顯示，不保留可見的比較訊息。`role="status"` 的 polite 回饋為「已建立搜尋比較基準」。
+2. **完成比較且有 Search Discovery**：以強調的行內文字「新增 N 筆」緊鄰結果筆數。Desktop 放在摘要的紀錄筆數旁；Search App 寬版放在搜尋結果摘要內，手機版放在 Bottom Sheet 結果控制列。
+3. **完成比較且沒有 Search Discovery**：以低調的行內文字「沒有新增」放在相同結果摘要位置。
+4. **完成比較但保存失敗**：保留第 2 或第 3 種狀態的行內文字，並以獨立、可見且具有 `role="alert"` 的警告顯示「比較基準未更新；下次可能重複顯示新增紀錄。」。
+5. **比較無法使用**：一般結果照常顯示，並以獨立、可見且具有 `role="alert"` 的警告說明失敗原因。首次保存失敗為「無法建立搜尋比較基準；已顯示一般搜尋結果。」；baseline 讀取失敗為「無法使用搜尋比較；已顯示一般搜尋結果。」。
+
+成功比較的回饋使用 `role="status"` 的 polite 公告；警告以單一 alert 公告，避免同一結果同時發出成功與失敗的重複提示。手機版 Bottom Sheet 收合時，結果控制的 accessible name 包含總筆數與 Search Discovery 狀態，例如「顯示 N 筆結果，新增 N 筆」。
 
 地圖與清單使用同一份 comparison 結果，不各自重新判定 identity。通知導向的選取可以改變畫面聚焦與清單投影，但不得改變 comparison 或 snapshot。
 

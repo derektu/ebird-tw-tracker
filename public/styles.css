@@ -340,6 +340,25 @@ select {
   font-size: 12px;
 }
 
+.metric .comparison-summary {
+  display: block;
+  margin-top: 2px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.metric .comparison-summary.accent { color: var(--active); }
+.metric .comparison-summary.muted { color: var(--muted); }
+
+.screen-reader-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .current {
   flex: 0 0 auto;
   display: flex;
@@ -857,18 +876,14 @@ select {
 .comparison {
   margin: 10px 14px 0;
   padding: 8px 10px;
-  border: 1px solid #bddbcb;
+  border: 1px solid #ead5bb;
   border-radius: 8px;
-  background: #eef8f3;
-  color: var(--active);
+  background: #fff7ec;
+  color: var(--private);
   font-size: 13px;
 }
 
-.comparison.warning {
-  border-color: #ead5bb;
-  background: #fff7ec;
-  color: var(--private);
-}
+
 
 .tag.discovery {
   margin-right: 5px;

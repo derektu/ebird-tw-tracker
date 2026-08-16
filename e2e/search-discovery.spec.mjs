@@ -69,49 +69,6 @@ async function failIndexedDbOpen(page, callNumber) {
   }, callNumber);
 }
 
-async function abortIndexedDbWrite(page, writeNumber) {
-  await page.addInitScript((failAt) => {
-    const browserIndexedDb = window.indexedDB;
-    let writes = 0;
-    Object.defineProperty(window, "indexedDB", {
-      configurable: true,
-      value: {
-        open(...args) {
-          const request = browserIndexedDb.open.call(browserIndexedDb, ...args);
-          let wrappedDatabase;
-          return new Proxy(request, {
-            get(target, property) {
-              if (property !== "result") {
-                const value = Reflect.get(target, property, target);
-                return typeof value === "function" ? value.bind(target) : value;
-              }
-              const database = target.result;
-              if (!database) return database;
-              if (!wrappedDatabase) {
-                wrappedDatabase = new Proxy(database, {
-                  get(databaseTarget, databaseProperty) {
-                    if (databaseProperty === "transaction") {
-                      return (...transactionArgs) => {
-                        const transaction = databaseTarget.transaction(...transactionArgs);
-                        if (transactionArgs[1] === "readwrite" && ++writes === failAt) {
-                          queueMicrotask(() => transaction.abort());
-                        }
-                        return transaction;
-                      };
-                    }
-                    const value = Reflect.get(databaseTarget, databaseProperty, databaseTarget);
-                    return typeof value === "function" ? value.bind(databaseTarget) : value;
-                  },
-                });
-              }
-              return wrappedDatabase;
-            },
-          });
-        },
-      },
-    });
-  }, writeNumber);
-}
 
 async function readIndexedDbSnapshot(page, key) {
   return page.evaluate((snapshotKey) => new Promise((resolve, reject) => {
@@ -129,13 +86,14 @@ async function readIndexedDbSnapshot(page, key) {
   }), key);
 }
 
-test("a first Search App search creates a baseline without marking existing results as discoveries", async ({ page }) => {
+test("a first Search App search creates a baseline without a persistent comparison row", async ({ page }) => {
   await signIn(page);
   await stubSearches(page, [observations([firstObservation])]);
 
   await search(page);
 
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
+  await expect(page.locator(".search-comparison")).toHaveCount(0);
   await expect(page.getByText("新增", { exact: true })).toHaveCount(0);
 });
 
@@ -144,10 +102,12 @@ test("a later Search App search shares one discovery result between list badges 
   await stubSearches(page, [observations([firstObservation]), observations([discoveryObservation, firstObservation])]);
 
   await search(page);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   await search(page);
 
-  await expect(page.getByText("新增 1 筆紀錄")).toBeVisible();
+  await expect(page.locator(".search-results-summary")).toContainText("新增 1 筆");
+  await expect(page.locator(".search-comparison")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveText("新增 1 筆");
   await expect(page.getByText("新增", { exact: true })).toBeVisible();
   const discoveryMarker = page.locator(".bird-marker").filter({ hasText: "5" });
   await expect(discoveryMarker).toHaveClass(/discovery/);
@@ -161,7 +121,7 @@ test("two browser Search Scopes retain independent IndexedDB baselines", async (
   await stubSearches(page, [observations([firstObservation]), observations([sevenDayObservation])]);
 
   await search(page);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   expect(await readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
   await page.locator('input[type="number"]').fill("7");
   await search(page);
@@ -175,7 +135,7 @@ test("clearing browser site data makes the next successful Search App search est
   await stubSearches(page, [observations([firstObservation]), observations([discoveryObservation, firstObservation])]);
 
   await search(page);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   await page.evaluate(() => new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase("ebird-search-snapshots");
     request.onsuccess = () => resolve();
@@ -183,18 +143,18 @@ test("clearing browser site data makes the next successful Search App search est
   }));
   await search(page);
 
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   await expect(page.getByText("新增", { exact: true })).toHaveCount(0);
 });
 
-test("an IndexedDB transaction failure shows ordinary results without a fallback baseline", async ({ page }) => {
-  await abortIndexedDbWrite(page, 1);
+test("an IndexedDB initial-save failure shows ordinary results without a fallback baseline", async ({ page }) => {
+  await failIndexedDbOpen(page, 2);
   await signIn(page);
   await stubSearches(page, [observations([firstObservation])]);
 
   await search(page);
 
-  await expect(page.getByText("搜尋比較暫時無法使用")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText("無法建立搜尋比較基準；已顯示一般搜尋結果。");
   await expect(page.getByText("基準地點")).toBeVisible();
   await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("snapshot")))).toEqual([]);
 });
@@ -230,8 +190,7 @@ test("a stale browser search cannot replace the latest Search App result or base
   });
 
   await search(page);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
-  expect(await readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   await search(page);
   await olderRequested;
   const daysField = page.locator('input[type="number"]');
@@ -248,12 +207,24 @@ test("a stale browser search cannot replace the latest Search App result or base
   await expect(page.getByText("基準地點")).toHaveCount(0);
   await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
 });
-
-test("Search App visibly distinguishes no discoveries, save warning, and unavailable comparison", async ({ browser }) => {
+test("Search App distinguishes muted no discoveries from visible comparison warnings", async ({ browser }) => {
   const cases = [
-    { failureAt: undefined, expected: "沒有新增紀錄", responses: [observations([firstObservation]), observations([firstObservation])] },
-    { failureAt: 4, expected: "新增 1 筆紀錄；基準未更新", responses: [observations([firstObservation]), observations([discoveryObservation, firstObservation])] },
-    { failureAt: 1, expected: "搜尋比較暫時無法使用", responses: [observations([firstObservation])] },
+    {
+      failureAt: undefined,
+      compactText: "沒有新增",
+      responses: [observations([firstObservation]), observations([firstObservation])],
+    },
+    {
+      failureAt: 4,
+      compactText: "新增 1 筆",
+      warningText: "比較基準未更新；下次可能重複顯示新增紀錄。",
+      responses: [observations([firstObservation]), observations([discoveryObservation, firstObservation])],
+    },
+    {
+      failureAt: 1,
+      warningText: "無法使用搜尋比較；已顯示一般搜尋結果。",
+      responses: [observations([firstObservation])],
+    },
   ];
 
   for (const scenario of cases) {
@@ -264,7 +235,14 @@ test("Search App visibly distinguishes no discoveries, save warning, and unavail
     await stubSearches(page, scenario.responses);
     await search(page);
     if (scenario.responses.length) await search(page);
-    await expect(page.getByText(scenario.expected)).toBeVisible();
+    if (scenario.compactText) {
+      await expect(page.locator(".search-results-summary")).toContainText(scenario.compactText);
+      if (!scenario.warningText) await expect(page.locator(".search-comparison")).toHaveCount(0);
+    }
+    if (scenario.warningText) {
+      await expect(page.getByRole("alert")).toHaveText(scenario.warningText);
+      await expect(page.getByRole("status")).toHaveCount(0);
+    }
     if (scenario.failureAt === 4) await expect(page.getByText("新增", { exact: true })).toBeVisible();
     if (scenario.failureAt === 1) await expect(page.getByText("新增", { exact: true })).toHaveCount(0);
     await context.close();
@@ -280,7 +258,6 @@ test("compact mobile controls retain the zero-coordinate result explanation", as
   await expect(page.getByRole("button", { name: "修改搜尋" })).toBeVisible();
   await expect(page.getByText("這個條件沒有找到有座標的公開紀錄。")).toBeVisible();
 });
-
 test("compact mobile controls retain unavailable Search Discovery status", async ({ page }) => {
   await page.setViewportSize({ width: 483, height: 852 });
   await failIndexedDbOpen(page, 1);
@@ -289,5 +266,32 @@ test("compact mobile controls retain unavailable Search Discovery status", async
 
   await search(page);
   await expect(page.getByRole("button", { name: "修改搜尋" })).toBeVisible();
-  await expect(page.getByText("搜尋比較暫時無法使用")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText("無法使用搜尋比較；已顯示一般搜尋結果。");
+});
+
+test("mobile Bottom Sheet carries compact discoveries through half, expanded, and collapsed states", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+  await stubSearches(page, [
+    observations([firstObservation]),
+    observations([discoveryObservation, firstObservation]),
+  ]);
+
+  await search(page);
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
+  await page.getByRole("button", { name: "修改搜尋" }).click();
+  await search(page);
+
+  const sheet = page.getByRole("complementary", { name: "搜尋結果" });
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("2 筆結果 · 新增 1 筆");
+  await page.getByRole("button", { name: "展開結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "expanded");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("2 筆結果 · 新增 1 筆");
+  await page.getByRole("button", { name: "收合結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "collapsed");
+  const reopen = page.getByRole("button", { name: "顯示 2 筆結果，新增 1 筆" });
+  await expect(reopen).toBeVisible();
+  await reopen.click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
 });

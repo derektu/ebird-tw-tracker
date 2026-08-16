@@ -6,6 +6,7 @@ import { createMarkerClassName } from "../../features/map/marker-presentation.mj
 import type { Observation, Species } from "../../types/domain";
 import type { SearchWorkflowEvent } from "../../features/search/types";
 import { createChecklistIdentity, type SearchComparison } from "../../domain/search-discovery.mjs";
+import { presentSearchComparison } from "../../domain/search-comparison-presentation.mjs";
 import { createSearchAppRuntime } from "./search-app-runtime.mjs";
 import { createIndexedDbSearchSnapshotStore } from "./browser-search-snapshot-store.mjs";
 import { createSearchWorkflow } from "../../features/search/search-workflow.mjs";
@@ -71,21 +72,8 @@ function createPopup(observation: Observation) {
   return popup;
 }
 
-function comparisonMessage(comparison: SearchComparison | null) {
-  if (!comparison) return null;
-  if (comparison.status === "baseline-created") return "已建立搜尋比較基準";
-  if (comparison.status === "unavailable") return "搜尋比較暫時無法使用";
-  const message = comparison.discoveryIds.length
-    ? `新增 ${comparison.discoveryIds.length} 筆紀錄`
-    : "沒有新增紀錄";
-  return comparison.snapshotCommit === "save-failed" ? `${message}；基準未更新` : message;
-}
-
-function comparisonHasWarning(comparison: SearchComparison | null) {
-  return comparison?.status === "unavailable" || (comparison?.status === "compared" && comparison.snapshotCommit === "save-failed");
-}
-
 export function SearchWorkspace() {
+
   const [query, setQuery] = useState("");
   const [days, setDays] = useState(3);
   const [selectedSpecies, setSelectedSpecies] = useState<Species | null>(null);
@@ -295,9 +283,9 @@ export function SearchWorkspace() {
     },
     [days, query, selectedSpecies, workflow],
   );
-
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
-  const visibleComparisonMessage = comparisonMessage(comparison);
+
+  const comparisonPresentation = presentSearchComparison(comparison);
 
   return (
     <main className="search-workspace">
@@ -402,10 +390,18 @@ export function SearchWorkspace() {
         {species && (
           <p className="search-results-summary">
             {species.comName}（{species.speciesCode}）最近 {publishedDays} 天：{observations.length} 筆有座標紀錄
+            {comparisonPresentation.compactText && (
+              <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
+                {" · "}{comparisonPresentation.compactText}
+              </span>
+            )}
           </p>
         )}
-        {visibleComparisonMessage && (
-          <p className={`search-comparison${comparisonHasWarning(comparison) ? " warning" : ""}`}>{visibleComparisonMessage}</p>
+        {comparisonPresentation.assistiveStatus && (
+          <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
+        )}
+        {comparisonPresentation.warningText && (
+          <p className="search-comparison warning" role="alert">{comparisonPresentation.warningText}</p>
         )}
         {searched && observations.length === 0 && (
           <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>
@@ -427,6 +423,7 @@ export function SearchWorkspace() {
               className="reopen-results-button"
               type="button"
               ref={reopenResultsRef}
+              aria-label={`顯示 ${observations.length} 筆結果${comparisonPresentation.compactText ? `，${comparisonPresentation.compactText}` : ""}`}
               onClick={() => {
                 setSheetState("half");
                 window.requestAnimationFrame(() => sheetHandleRef.current?.focus());
@@ -439,6 +436,14 @@ export function SearchWorkspace() {
         {observations.length > 0 && (
         <aside className="side" data-sheet-state={sheetState} aria-label="搜尋結果">
           <div className="bottom-sheet-controls">
+            <span className="bottom-sheet-result-summary">
+              {observations.length} 筆結果
+              {comparisonPresentation.compactText && (
+                <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
+                  {" · "}{comparisonPresentation.compactText}
+                </span>
+              )}
+            </span>
             <button
               className="sheet-handle"
               type="button"

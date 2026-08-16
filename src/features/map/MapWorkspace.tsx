@@ -5,6 +5,7 @@ import type { Observation, ObservationEvent, Species } from "../../types/domain"
 import type { SearchRequest, SearchResult } from "../search/types";
 import { createChecklistIdentity, createSearchScope } from "../../domain/search-discovery.mjs";
 import type { SearchComparison } from "../../domain/search-discovery.mjs";
+import { presentSearchComparison } from "../../domain/search-comparison-presentation.mjs";
 import type { Tracker } from "../tracking/types";
 import { createMarkerClassName } from "./marker-presentation.mjs";
 import {
@@ -330,15 +331,7 @@ export function MapWorkspace() {
   const visibleComparison = comparisonScopeKey === (species && createSearchScope(species.speciesCode, searchDaysRef.current).key)
     ? comparison
     : undefined;
-  const comparisonMessage = visibleComparison?.status === "baseline-created"
-    ? "已建立搜尋比較基準"
-    : visibleComparison?.status === "compared"
-      ? visibleComparison.discoveryIds.length
-        ? `新增 ${visibleComparison.discoveryIds.length} 筆紀錄${visibleComparison.snapshotCommit === "save-failed" ? "；基準未更新" : ""}`
-        : `沒有新增紀錄${visibleComparison.snapshotCommit === "save-failed" ? "；基準未更新" : ""}`
-      : visibleComparison?.status === "unavailable"
-        ? "搜尋比較暫時無法使用"
-        : null;
+  const comparisonPresentation = presentSearchComparison(visibleComparison);
   const discoveryIds = new Set(visibleComparison?.discoveryIds ?? []);
 
   return (
@@ -386,7 +379,15 @@ export function MapWorkspace() {
 
       <aside className="side">
         <section className="summary">
-          <div className="metric"><strong>{observations.length}</strong><span>紀錄</span></div>
+          <div className="metric result-count">
+            <strong>{observations.length}</strong>
+            <span>紀錄</span>
+            {comparisonPresentation.compactText && (
+              <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
+                {comparisonPresentation.compactText}
+              </span>
+            )}
+          </div>
           <div className="metric"><strong>{birdCount}</strong><span>隻數合計</span></div>
           <div className="metric"><strong>{privateCount}</strong><span>自訂地點</span></div>
         </section>
@@ -394,7 +395,12 @@ export function MapWorkspace() {
           <strong>{species?.comName ?? "鳥種"}</strong>
           <span>{species?.speciesCode ?? ""}</span>
         </section>
-        {comparisonMessage && <div className={`comparison${visibleComparison?.status === "unavailable" || (visibleComparison?.status === "compared" && visibleComparison.snapshotCommit === "save-failed") ? " warning" : ""}`}>{comparisonMessage}</div>}
+        {comparisonPresentation.assistiveStatus && (
+          <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
+        )}
+        {comparisonPresentation.warningText && (
+          <div className="comparison warning" role="alert">{comparisonPresentation.warningText}</div>
+        )}
         <div className="list">
           {observations.length ? observations.map((observation, index) => (
             <button

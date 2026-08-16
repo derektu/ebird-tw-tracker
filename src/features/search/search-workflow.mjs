@@ -181,7 +181,12 @@ export function createSearchWorkflow({
           snapshotsUnavailable = true;
         }
       }
-      const species = await runtime.resolveSpecies(normalizedIntent, { isCurrent: () => isCurrent(requestGeneration) });
+      const species = await runtime.resolveSpecies(normalizedIntent, {
+        isCurrent: () => isCurrent(requestGeneration),
+        markSpeciesResolved() {
+          phase = "observations";
+        },
+      });
       if (!isCurrent(requestGeneration)) {
         publishStale(requestId, source);
         return { status: "stale", requestId, source };

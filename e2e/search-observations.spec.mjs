@@ -155,10 +155,14 @@ test("an unresolvable search clears a preceding Search App result without replac
 
   await expect(page.getByRole("alert")).toHaveText("找不到 eBird 鳥種：不存在的鳥種");
   await expect(searchField).toHaveValue("不存在的鳥種");
+  await expect(page.locator(".search-results-summary")).toHaveCount(0);
   await expect(page.getByText("宜蘭雙連埤")).toHaveCount(0);
   await expect(page.getByText("已建立搜尋比較基準")).toHaveCount(0);
   await expect(page.getByText("這個條件沒有找到有座標的公開紀錄。")).toHaveCount(0);
   await expect(page.locator(".bird-marker")).toHaveCount(0);
+  await expect(page.locator(".observation-card")).toHaveCount(0);
+  await expect(page.locator(".observation-card.active")).toHaveCount(0);
+  await expect(page.locator(".bottom-sheet-controls")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "搜尋" })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => new Promise((resolve, reject) => {
     const openRequest = indexedDB.open("ebird-search-snapshots");

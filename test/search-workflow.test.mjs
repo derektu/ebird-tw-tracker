@@ -190,6 +190,51 @@ test("a stale species-resolution failure cannot publish over a newer successful 
   }]);
 });
 
+test("a post-resolution Desktop saved-species refresh failure retains the published result", async () => {
+  const events = [];
+  let savedSpeciesReads = 0;
+  let publishedResult = null;
+  const refreshedSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: createDesktopSearchRuntime({
+      async fetchSavedSpecies() {
+        savedSpeciesReads += 1;
+        if (savedSpeciesReads === 2) throw new Error("已儲存鳥種讀取失敗");
+        return [species];
+      },
+      publishSavedSpecies() {},
+      async resolveSpecies(query) {
+        return query === "彩鷸" ? species : refreshedSpecies;
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+    }),
+    publish(event) {
+      events.push(event);
+      if (event.type === "completed") publishedResult = event.result;
+      if (event.type === "failed" && event.error.source === "explicit" && event.error.phase === "species-resolution") {
+        publishedResult = null;
+      }
+    },
+  });
+
+  const completed = await workflow.run({ source: "explicit", query: "彩鷸", days: 3 });
+  const failed = await workflow.run({ source: "explicit", query: "小白鷺", days: 3 });
+
+  assert.equal(completed.status, "completed");
+  assert.deepEqual(failed, {
+    status: "failed",
+    error: {
+      requestId: "search-2",
+      source: "explicit",
+      phase: "observations",
+      message: "已儲存鳥種讀取失敗",
+    },
+  });
+  assert.equal(publishedResult, completed.result);
+});
+
 test("only the latest request can publish a result, failure, or busy clear", async () => {
   const requests = new Map();
   const events = [];

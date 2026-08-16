@@ -198,6 +198,18 @@ test("species resolve returns a null species for an unmatched query without fail
   assert.deepEqual(await response.json(), { species: null, candidates: [] });
 });
 
+test("species resolve does not silently pick a substring-only match", async () => {
+  const worker = createSearchWorker({ fetch: taxonomyUpstream(), cache: createMemoryCache() });
+  const response = await worker.fetch(getRequest("/api/species/resolve?q=鷸"));
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.species, null);
+  assert.deepEqual(
+    payload.candidates.map((species) => species.speciesCode).sort(),
+    ["comsan", "grpsni1"],
+  );
+});
+
 test("taxonomy is cached at the edge under a fixed key that never embeds the caller's API key", async () => {
   let upstreamCalls = 0;
   const fetchSpy = async (request) => {

@@ -1,4 +1,4 @@
-import { searchTaxonomy } from "../server/domain/species.mjs";
+import { resolveTaxonomyMatch, searchTaxonomy } from "../server/domain/species.mjs";
 import { mapObservations } from "../server/domain/observations.mjs";
 import { callEbird } from "./ebird.mjs";
 import { loadTaxonomy } from "./taxonomy.mjs";
@@ -77,8 +77,8 @@ export async function handleSpeciesResolve(request, url, { upstreamFetch, cache 
   const taxonomyResult = await loadTaxonomy({ upstreamFetch, apiKey, cache });
   if (!taxonomyResult.ok) return taxonomyResult.response;
 
-  const candidates = searchTaxonomy(taxonomyResult.data, q);
-  return json(200, { species: candidates[0] ?? null, candidates });
+  const { species, candidates } = resolveTaxonomyMatch(taxonomyResult.data, q);
+  return json(200, { species, candidates });
 }
 
 export async function handleObservations(request, url, { upstreamFetch }) {

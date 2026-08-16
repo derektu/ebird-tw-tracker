@@ -159,6 +159,7 @@ export function createSearchWorkflow({
 
     publish({ type: "busy", busy: true, ...request });
 
+    let phase = "species-resolution";
     try {
       let snapshotsUnavailable = false;
       if (snapshots?.advance) {
@@ -186,6 +187,7 @@ export function createSearchWorkflow({
         return { status: "stale", requestId, source };
       }
 
+      phase = "observations";
       const payload = await runtime.fetchObservations({
         requestId,
         source,
@@ -224,6 +226,7 @@ export function createSearchWorkflow({
       const failure = {
         requestId,
         source,
+        phase,
         message: errorMessage(error),
       };
       publish({ type: "failed", error: failure });

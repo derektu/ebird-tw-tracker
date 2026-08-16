@@ -113,3 +113,63 @@ test("an unresolvable species query shows a bounded not-found error", async ({ p
 
   await expect(page.getByRole("alert")).toHaveText("找不到 eBird 鳥種：不存在的鳥種");
 });
+
+test("an unresolvable search clears a preceding Search App result without replacing its Search Baseline", async ({ page }) => {
+  await signIn(page);
+  await page.route("**/api/species/resolve*", (route) => {
+    const query = new URL(route.request().url()).searchParams.get("q");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(query === "彩鷸"
+        ? resolveResponse
+        : { species: null, candidates: [] }),
+    });
+  });
+  await page.route("**/api/observations*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(observationsResponse),
+  }));
+
+  const searchField = page.getByPlaceholder("輸入中文名、英文名或 species code");
+  await searchField.fill("彩鷸");
+  await page.getByRole("button", { name: "搜尋" }).click();
+  await expect(page.getByText("宜蘭雙連埤")).toBeVisible();
+  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  const baselineBeforeFailure = await page.evaluate(() => new Promise((resolve, reject) => {
+    const openRequest = indexedDB.open("ebird-search-snapshots");
+    openRequest.onerror = () => reject(openRequest.error);
+    openRequest.onsuccess = () => {
+      const database = openRequest.result;
+      const transaction = database.transaction("search-snapshots", "readonly");
+      const readRequest = transaction.objectStore("search-snapshots").get("grpsni1:3");
+      readRequest.onsuccess = () => resolve(readRequest.result ?? null);
+      readRequest.onerror = () => reject(readRequest.error);
+      transaction.oncomplete = () => database.close();
+    };
+  }));
+
+  await searchField.fill("不存在的鳥種");
+  await page.getByRole("button", { name: "搜尋" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText("找不到 eBird 鳥種：不存在的鳥種");
+  await expect(searchField).toHaveValue("不存在的鳥種");
+  await expect(page.getByText("宜蘭雙連埤")).toHaveCount(0);
+  await expect(page.getByText("已建立搜尋比較基準")).toHaveCount(0);
+  await expect(page.getByText("這個條件沒有找到有座標的公開紀錄。")).toHaveCount(0);
+  await expect(page.locator(".bird-marker")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜尋" })).toBeEnabled();
+  await expect.poll(() => page.evaluate(() => new Promise((resolve, reject) => {
+    const openRequest = indexedDB.open("ebird-search-snapshots");
+    openRequest.onerror = () => reject(openRequest.error);
+    openRequest.onsuccess = () => {
+      const database = openRequest.result;
+      const transaction = database.transaction("search-snapshots", "readonly");
+      const readRequest = transaction.objectStore("search-snapshots").get("grpsni1:3");
+      readRequest.onsuccess = () => resolve(readRequest.result ?? null);
+      readRequest.onerror = () => reject(readRequest.error);
+      transaction.oncomplete = () => database.close();
+    };
+  }))).toEqual(baselineBeforeFailure);
+});

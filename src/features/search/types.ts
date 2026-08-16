@@ -94,6 +94,7 @@ export interface SearchFailedEvent {
   error: {
     requestId: string;
     source: SearchSource;
+    phase: "species-resolution" | "observations";
     message: string;
   };
 }

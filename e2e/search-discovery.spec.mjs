@@ -295,3 +295,59 @@ test("mobile Bottom Sheet carries compact discoveries through half, expanded, an
   await reopen.click();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
 });
+
+test("mobile Bottom Sheet retains muted no-discovery feedback through every sheet state", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+  await stubSearches(page, [observations([firstObservation]), observations([firstObservation])]);
+
+  await search(page);
+  await page.getByRole("button", { name: "修改搜尋" }).click();
+  await search(page);
+
+  const sheet = page.getByRole("complementary", { name: "搜尋結果" });
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("1 筆結果 · 沒有新增");
+  await page.getByRole("button", { name: "展開結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "expanded");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("1 筆結果 · 沒有新增");
+  await page.getByRole("button", { name: "收合結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "collapsed");
+  await expect(sheet).toBeHidden();
+  const reopen = page.getByRole("button", { name: "顯示 1 筆結果，沒有新增" });
+  await expect(reopen).toBeVisible();
+  await reopen.click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+});
+
+test("mobile Bottom Sheet preserves compact discovery and save warning through every sheet state", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await failIndexedDbOpen(page, 4);
+  await signIn(page);
+  await stubSearches(page, [
+    observations([firstObservation]),
+    observations([discoveryObservation, firstObservation]),
+  ]);
+
+  await search(page);
+  await page.getByRole("button", { name: "修改搜尋" }).click();
+  await search(page);
+
+  const sheet = page.getByRole("complementary", { name: "搜尋結果" });
+  const warning = page.getByRole("alert");
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("2 筆結果 · 新增 1 筆");
+  await expect(warning).toHaveText("比較基準未更新；下次可能重複顯示新增紀錄。");
+  await page.getByRole("button", { name: "展開結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "expanded");
+  await expect(page.locator(".bottom-sheet-result-summary")).toContainText("2 筆結果 · 新增 1 筆");
+  await expect(warning).toBeVisible();
+  await page.getByRole("button", { name: "收合結果清單" }).click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "collapsed");
+  await expect(sheet).toBeHidden();
+  await expect(warning).toBeVisible();
+  const reopen = page.getByRole("button", { name: "顯示 2 筆結果，新增 1 筆" });
+  await expect(reopen).toBeVisible();
+  await reopen.click();
+  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+});

@@ -7,6 +7,39 @@ const speciesResolvePath = "/api/species/resolve";
 const observationsPath = "/api/observations";
 const validationProbeUrl = "https://api.ebird.org/v2/data/obs/TW/recent?back=1&maxResults=1";
 
+// Leaflet assigns positioning styles in the DOM, so its self-hosted stylesheet
+// needs this narrowly documented inline-style exception. Scripts, network
+// requests, frames, and every other asset remain restricted to this origin
+// except for the OpenStreetMap tiles needed to render the map.
+const securityHeaders = {
+  "content-security-policy": [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self'",
+    "img-src 'self' data: https://*.tile.openstreetmap.org",
+    "font-src 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join("; "),
+  "permissions-policy": "camera=(), geolocation=(), microphone=()",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+};
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(securityHeaders)) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function invalidRequest(url) {
   return error(404, "not_found", `找不到 ${url.pathname}`);
 }
@@ -55,31 +88,29 @@ export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache
   return {
     async fetch(request) {
       const url = new URL(request.url);
+      let response;
 
       if (url.pathname === validationPath) {
-        return validateKey(request, upstreamFetch);
-      }
-      if (url.pathname === speciesSearchPath) {
-        return handleSpeciesSearch(request, url, deps);
-      }
-      if (url.pathname === speciesResolvePath) {
-        return handleSpeciesResolve(request, url, deps);
-      }
-      if (url.pathname === observationsPath) {
-        return handleObservations(request, url, deps);
-      }
-
-      if (url.pathname.startsWith("/api/")) {
-        return invalidRequest(url);
-      }
-
-      if (assets) {
+        response = await validateKey(request, upstreamFetch);
+      } else if (url.pathname === speciesSearchPath) {
+        response = await handleSpeciesSearch(request, url, deps);
+      } else if (url.pathname === speciesResolvePath) {
+        response = await handleSpeciesResolve(request, url, deps);
+      } else if (url.pathname === observationsPath) {
+        response = await handleObservations(request, url, deps);
+      } else if (url.pathname.startsWith("/api/")) {
+        response = invalidRequest(url);
+      } else if (assets) {
         if (url.pathname === "/") {
-          return assets.fetch(new Request(new URL("/search.html", request.url), request));
+          response = await assets.fetch(new Request(new URL("/search.html", request.url), request));
+        } else {
+          response = await assets.fetch(request);
         }
-        return assets.fetch(request);
+      } else {
+        response = invalidRequest(url);
       }
-      return invalidRequest(url);
+
+      return withSecurityHeaders(response);
     },
   };
 }

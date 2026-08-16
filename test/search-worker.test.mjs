@@ -110,6 +110,39 @@ test("validation forwards a browser key only to the fixed eBird endpoint and nev
   assert.ok(!body.includes(apiKey));
 });
 
+test("Worker responses apply a restrictive same-origin CSP and security headers without exposing the browser key", async () => {
+  const assets = {
+    async fetch() {
+      return new Response("<!doctype html><title>Search</title>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+  };
+  const worker = createSearchWorker({
+    assets,
+    fetch: async () => new Response("[]", { headers: { "content-type": "application/json" } }),
+  });
+
+  for (const request of [
+    new Request("https://search.example.test/"),
+    createRequest("/api/key/validate"),
+  ]) {
+    const response = await worker.fetch(request);
+    const csp = response.headers.get("content-security-policy");
+
+    assert.match(csp, /default-src 'self'/);
+    assert.match(csp, /script-src 'self'/);
+    assert.match(csp, /style-src 'self' 'unsafe-inline'/);
+    assert.match(csp, /connect-src 'self'/);
+    assert.match(csp, /img-src 'self' data: https:\/\/\*\.tile\.openstreetmap\.org/);
+    assert.match(csp, /frame-ancestors 'none'/);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.ok(![...response.headers.entries()].some(([name, value]) => name.includes("key") || value.includes(apiKey)));
+  }
+});
+
 test("validation maps invalid and temporary upstream failures without exposing upstream bodies", async () => {
   for (const [upstreamStatus, expectedStatus, expectedCode] of [
     [401, 401, "invalid_api_key"],

@@ -77,7 +77,7 @@ test("a failed explicit Desktop species resolution clears its preceding result p
   await expect(page.locator(".side .summary .metric").first()).toHaveText("1紀錄");
   await expect(page.locator(".side .item.active")).toHaveCount(1);
   await expect(page.locator(".bird-marker")).toHaveCount(1);
-  await expect(page.getByText("已建立搜尋比較基準")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   const writesBeforeFailure = calls.baselineWrites();
 
   const searchField = page.getByPlaceholder("輸入中文名、英文名或 species code");
@@ -95,7 +95,7 @@ test("a failed explicit Desktop species resolution clears its preceding result p
   await expect(page.locator(".side .comparison")).toHaveCount(0);
   await expect(page.locator(".bird-marker")).toHaveCount(0);
   await expect(page.getByText("桌面測試地點")).toHaveCount(0);
-  await expect(page.getByText("已建立搜尋比較基準")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.locator(".workspace .empty")).toHaveCount(0);
   expect(calls.baselineWrites()).toBe(writesBeforeFailure);
 });

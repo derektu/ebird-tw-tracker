@@ -69,7 +69,7 @@ export interface SearchObservationRequest {
 export interface SearchRuntime {
   resolveSpecies(
     intent: SearchIntent & { source: SearchSource; days: number },
-    lifecycle: { isCurrent(): boolean },
+    lifecycle: { isCurrent(): boolean; markSpeciesResolved?(): void },
   ): Promise<Species>;
   fetchObservations(request: SearchObservationRequest): Promise<ObservationsResponse>;
 }
@@ -94,6 +94,7 @@ export interface SearchFailedEvent {
   error: {
     requestId: string;
     source: SearchSource;
+    phase: "species-resolution" | "observations";
     message: string;
   };
 }

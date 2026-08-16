@@ -105,6 +105,136 @@ test("search workflow resolves a query through the runtime and preserves a suppl
   assert.equal(events[2].requestId, "desktop-explicit-7");
 });
 
+test("a failed explicit species resolution identifies its phase and leaves the Search Baseline unchanged", async () => {
+  const events = [];
+  const reads = [];
+  const commits = [];
+  const workflow = createSearchWorkflow({
+    runtime: {
+      async resolveSpecies(intent) {
+        if (intent.query === "不存在的鳥種") throw new Error("找不到 eBird 鳥種：不存在的鳥種");
+        return intent.species;
+      },
+      async fetchObservations() {
+        return payload;
+      },
+    },
+    snapshots: {
+      async read(scope) {
+        reads.push(scope.key);
+        return null;
+      },
+      async commit(scope) {
+        commits.push(scope.key);
+      },
+    },
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const completed = await workflow.run({ source: "explicit", species, days: 3 });
+  const failed = await workflow.run({ source: "explicit", query: "不存在的鳥種", days: 3 });
+
+  assert.equal(completed.status, "completed");
+  assert.deepEqual(failed, {
+    status: "failed",
+    error: {
+      requestId: "search-2",
+      source: "explicit",
+      phase: "species-resolution",
+      message: "找不到 eBird 鳥種：不存在的鳥種",
+    },
+  });
+  assert.deepEqual(reads, ["grpsni1:3"]);
+  assert.deepEqual(commits, ["grpsni1:3"]);
+  assert.deepEqual(events.filter((event) => event.type === "failed"), [{
+    type: "failed",
+    error: {
+      requestId: "search-2",
+      source: "explicit",
+      phase: "species-resolution",
+      message: "找不到 eBird 鳥種：不存在的鳥種",
+    },
+  }]);
+});
+
+test("a stale species-resolution failure cannot publish over a newer successful search", async () => {
+  const olderResolution = deferred();
+  const events = [];
+  const newerSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: {
+      resolveSpecies(intent) {
+        return intent.query === "不存在的鳥種" ? olderResolution.promise : Promise.resolve(intent.species);
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+    },
+    publish(event) {
+      events.push(event);
+    },
+  });
+
+  const older = workflow.run({ source: "explicit", query: "不存在的鳥種", days: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const newer = await workflow.run({ source: "explicit", species: newerSpecies, days: 3 });
+  olderResolution.reject(new Error("找不到 eBird 鳥種：不存在的鳥種"));
+
+  assert.equal(newer.status, "completed");
+  assert.deepEqual(await older, { status: "stale", requestId: "search-1", source: "explicit" });
+  assert.deepEqual(events.filter((event) => event.type === "completed" || event.type === "failed"), [{
+    type: "completed",
+    result: newer.result,
+  }]);
+});
+
+test("a post-resolution Desktop saved-species refresh failure retains the published result", async () => {
+  const events = [];
+  let savedSpeciesReads = 0;
+  let publishedResult = null;
+  const refreshedSpecies = { ...species, speciesCode: "yebgre1", comName: "小白鷺" };
+  const workflow = createSearchWorkflow({
+    runtime: createDesktopSearchRuntime({
+      async fetchSavedSpecies() {
+        savedSpeciesReads += 1;
+        if (savedSpeciesReads === 2) throw new Error("已儲存鳥種讀取失敗");
+        return [species];
+      },
+      publishSavedSpecies() {},
+      async resolveSpecies(query) {
+        return query === "彩鷸" ? species : refreshedSpecies;
+      },
+      async fetchObservations(request) {
+        return { ...payload, speciesCode: request.species.speciesCode };
+      },
+    }),
+    publish(event) {
+      events.push(event);
+      if (event.type === "completed") publishedResult = event.result;
+      if (event.type === "failed" && event.error.source === "explicit" && event.error.phase === "species-resolution") {
+        publishedResult = null;
+      }
+    },
+  });
+
+  const completed = await workflow.run({ source: "explicit", query: "彩鷸", days: 3 });
+  const failed = await workflow.run({ source: "explicit", query: "小白鷺", days: 3 });
+
+  assert.equal(completed.status, "completed");
+  assert.deepEqual(failed, {
+    status: "failed",
+    error: {
+      requestId: "search-2",
+      source: "explicit",
+      phase: "observations",
+      message: "已儲存鳥種讀取失敗",
+    },
+  });
+  assert.equal(publishedResult, completed.result);
+});
+
 test("only the latest request can publish a result, failure, or busy clear", async () => {
   const requests = new Map();
   const events = [];
@@ -144,13 +274,13 @@ test("only the latest request can publish a result, failure, or busy clear", asy
   assert.deepEqual(staleRequests, [{ requestId: "search-1", source: "explicit" }]);
   assert.deepEqual(await second, {
     status: "failed",
-    error: { requestId: "search-2", source: "notification-focus", message: "最新搜尋失敗" },
+    error: { requestId: "search-2", source: "notification-focus", phase: "observations", message: "最新搜尋失敗" },
   });
   assert.deepEqual(
     events.filter((event) => event.type === "completed" || event.type === "failed"),
     [{
       type: "failed",
-      error: { requestId: "search-2", source: "notification-focus", message: "最新搜尋失敗" },
+      error: { requestId: "search-2", source: "notification-focus", phase: "observations", message: "最新搜尋失敗" },
     }],
   );
   assert.deepEqual(

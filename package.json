@@ -22,7 +22,7 @@
     "test:search-bundle": "node --test test/build/search-bundle.test.mjs",
     "test:integration": "node --test integration/*.test.mjs",
     "test:integration:required": "EBIRD_INTEGRATION_REQUIRE_VALID_KEY=1 node --test integration/*.test.mjs",
-    "test:browser": "npm run build:search && playwright test",
+    "test:browser": "npm run build:search && playwright test && playwright test --config playwright.desktop.config.mjs",
     "check:all": "npm run check && npm run test:worker && npm run build:search && npm run test:search-bundle && npm run test:browser",
     "electron:dev": "electron .",
     "electron:pack": "npm run build && electron-builder --dir --publish never",

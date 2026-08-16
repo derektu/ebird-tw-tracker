@@ -159,6 +159,7 @@ export function createSearchWorkflow({
 
     publish({ type: "busy", busy: true, ...request });
 
+    let phase = "species-resolution";
     try {
       let snapshotsUnavailable = false;
       if (snapshots?.advance) {
@@ -180,12 +181,18 @@ export function createSearchWorkflow({
           snapshotsUnavailable = true;
         }
       }
-      const species = await runtime.resolveSpecies(normalizedIntent, { isCurrent: () => isCurrent(requestGeneration) });
+      const species = await runtime.resolveSpecies(normalizedIntent, {
+        isCurrent: () => isCurrent(requestGeneration),
+        markSpeciesResolved() {
+          phase = "observations";
+        },
+      });
       if (!isCurrent(requestGeneration)) {
         publishStale(requestId, source);
         return { status: "stale", requestId, source };
       }
 
+      phase = "observations";
       const payload = await runtime.fetchObservations({
         requestId,
         source,
@@ -224,6 +231,7 @@ export function createSearchWorkflow({
       const failure = {
         requestId,
         source,
+        phase,
         message: errorMessage(error),
       };
       publish({ type: "failed", error: failure });

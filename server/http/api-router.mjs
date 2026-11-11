@@ -1,3 +1,4 @@
+import { searchBirdSpots } from "../../src/domain/bird-spot-directory.mjs";
 import { SavedBirdSpotError } from "../../src/domain/saved-bird-spots.mjs";
 import { BirdSpotError, readBirdSpotQuery } from "../../src/domain/bird-spots.mjs";
 import { normalizeSpecies } from "../domain/species.mjs";
@@ -24,7 +25,7 @@ export function readBody(request) {
   });
 }
 
-export function createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots }) {
+export function createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots, birdSpotDirectory }) {
   return async function handleApi(request, response, url) {
     if (url.pathname === "/api/settings/api-key" && request.method === "GET") {
       jsonResponse(response, 200, await settings.status());
@@ -58,6 +59,18 @@ export function createApiRouter({ settings, species, observations, tracking, sea
         return;
       }
       jsonResponse(response, 200, { saved: await species.save(normalized) });
+      return;
+    }
+    if (["/api/bird-spots/directory", "/api/bird-spots/search"].includes(url.pathname)) {
+      const searching = url.pathname.endsWith("/search");
+      if (request.method !== "GET") { jsonResponse(response, 405, { code: "method_not_allowed", error: "此 API 僅接受 GET" }); return; }
+      if ([...url.searchParams.keys()].some(key => !searching || key !== "q") || url.searchParams.getAll("q").length > 1 || (url.searchParams.get("q") ?? "").length > 200) {
+        jsonResponse(response, 400, { code: "unexpected_query", error: "鳥點搜尋只接受單一 q（最多 200 字）" }); return;
+      }
+      let apiKey;
+      try { apiKey = await settings.requireApiKey(); } catch {}
+      const directory = await birdSpotDirectory.directory(apiKey);
+      jsonResponse(response, 200, searching ? { ...directory, spots: searchBirdSpots(directory.spots, await savedBirdSpots.list(), url.searchParams.get("q") ?? "") } : directory);
       return;
     }
     const savedSpotMatch = url.pathname.match(/^\/api\/bird-spots\/saved(?:\/([^/]+))?$/);

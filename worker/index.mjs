@@ -1,3 +1,4 @@
+import { createWorkerBirdSpotDirectory } from "./bird-spot-directory.mjs";
 import { error, json } from "./responses.mjs";
 import { handleBirdSpotObservations, handleObservations, handleSpeciesResolve, handleSpeciesSearch } from "./routes.mjs";
 
@@ -83,14 +84,19 @@ async function validateKey(request, upstreamFetch) {
   return json(200, { valid: true });
 }
 
-export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache } = {}) {
+export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache, now } = {}) {
   const deps = { upstreamFetch, cache };
+  const directory = createWorkerBirdSpotDirectory({ upstreamFetch, cache, now });
   return {
     async fetch(request) {
       const url = new URL(request.url);
       let response;
 
-      if (url.pathname === validationPath) {
+      if (url.pathname === "/api/bird-spots/directory") {
+        if (request.method !== "GET") response = error(405, "method_not_allowed", "此 API 僅接受 GET");
+        else if (url.search) response = error(400, "unexpected_query", "目錄 API 不接受 query parameter");
+        else response = json(200, await directory.directory(request.headers.get("X-eBird-Api-Key")?.trim()));
+      } else if (url.pathname === validationPath) {
         response = await validateKey(request, upstreamFetch);
       } else if (url.pathname === speciesSearchPath) {
         response = await handleSpeciesSearch(request, url, deps);
@@ -117,8 +123,10 @@ export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache
   };
 }
 
+let defaultWorker;
 export default {
   fetch(request, environment) {
-    return createSearchWorker({ assets: environment.ASSETS, cache: caches.default }).fetch(request);
+    defaultWorker ??= createSearchWorker({ assets: environment.ASSETS, cache: caches.default });
+    return defaultWorker.fetch(request);
   },
 };

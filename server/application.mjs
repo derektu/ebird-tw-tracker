@@ -1,3 +1,5 @@
+import { createBirdSpotDirectoryService } from "./services/bird-spot-directory-service.mjs";
+import { createFileBirdSpotDirectoryCache } from "./storage/bird-spot-directory-cache.mjs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -37,6 +39,7 @@ export async function createApplication({
   viteHmr = true,
   birdSpotFetch = fetch,
   savedBirdSpotStore,
+  directoryNow = Date.now,
 } = {}) {
   const paths = {
     savedSpecies: path.join(dataDir, "saved-species.json"),
@@ -71,7 +74,8 @@ export async function createApplication({
   });
   const searchSnapshots = searchSnapshotStore ?? createSearchSnapshotStore({ filePath: paths.searchSnapshots });
   const savedBirdSpots = savedBirdSpotStore ?? createFileSavedBirdSpotStore({ filePath: paths.savedBirdSpots });
-  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots });
+  const birdSpotDirectory = createBirdSpotDirectoryService({ upstreamFetch: birdSpotFetch, now: directoryNow, ...createFileBirdSpotDirectoryCache(path.join(dataDir, "bird-spot-directory.json")) });
+  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots, birdSpotDirectory });
 
   let vite = null;
   if (!isProduction) {
@@ -144,5 +148,5 @@ export async function createApplication({
     await vite?.close();
   }
 
-  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots } };
+  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots, birdSpotDirectory } };
 }

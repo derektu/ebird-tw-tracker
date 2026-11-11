@@ -7,6 +7,8 @@
 *.key
 *.mobileprovision
 data/taxonomy-cache.*.json
+data/bird-spot-directory.json
+data/bird-spot-directory.json.*.tmp
 data/trackers.json
 data/seen-observations.json
 data/events.json

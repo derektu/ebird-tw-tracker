@@ -6,6 +6,7 @@ import { sortSavedBirdSpots } from "../../domain/saved-bird-spots.mjs";
 import { normalizeBirdSpot } from "../../domain/bird-spots.mjs";
 import { createDesktopSavedBirdSpotStore } from "../map/desktop-saved-bird-spots.mjs";
 
+const defaultRecentDays = 3;
 const store = createDesktopSavedBirdSpotStore({ request: fetchJson });
 type View = { kind: "results" } | { kind: "saved" } | { kind: "detail"; spot: BirdSpot; origin: "results" | "saved"; species: Species | null };
 type Collection = { kind: "loading" } | { kind: "ready"; spots: SavedBirdSpot[] } | { kind: "error"; message: string };
@@ -21,7 +22,7 @@ export function useDesktopBirdSpots() {
   const [actionError, setActionError] = useState("");
   const [undo, setUndo] = useState<SavedBirdSpot | null>(null);
   const [recent, setRecent] = useState<Recent>({ kind: "loading" });
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState(defaultRecentDays);
   const [onlySpecies, setOnlySpecies] = useState(false);
   const [reload, setReload] = useState(0);
   const beforeLeave = useRef<() => boolean>(() => true);
@@ -55,7 +56,7 @@ export function useDesktopBirdSpots() {
     if (!beforeLeave.current()) return;
     beforeDetailOpen.current();
     generation.current++;
-    setDays(14); setOnlySpecies(false); setRecent({ kind: "loading" }); setActionError("");
+    setDays(defaultRecentDays); setOnlySpecies(false); setRecent({ kind: "loading" }); setActionError("");
     setView({ kind: "detail", spot, origin, species });
   }, []);
   const back = useCallback(() => {

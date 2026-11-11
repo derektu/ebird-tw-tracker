@@ -1162,3 +1162,47 @@ select {
 .bird-spot-action-error { bottom: 80px; background: #fff4e6; color: var(--danger); border: 1px solid #ead5bb; }
 .bird-spot-storage-error { bottom: auto; top: 14px; background: #fff4e6; color: var(--danger); border: 1px solid #ead5bb; }
 .bird-spot-action-error .text-btn { color: var(--danger); border: 0; background: transparent; white-space: nowrap; }
+
+.search { grid-template-columns: 76px minmax(180px, 1fr) 82px 66px 92px; }
+.search-spots { grid-template-columns: 76px minmax(200px, 1fr) 66px; }
+.search-mode select { padding: 0 6px; }
+.bird-spots-manager-host { display: contents; }
+.bird-spots-manager .bird-spots-dialog { width: min(1080px, 100%); height: min(720px, 90vh); max-height: 90vh; }
+.bird-spots-manager .bird-spots-dialog > header { flex-shrink: 0; }
+.bird-spots-manager-columns { display: grid; grid-template-columns: minmax(240px, .85fr) minmax(0, 1.3fr); min-height: 0; min-width: 0; overflow: hidden; flex: 1; }
+.bird-spots-manager-sidebar { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; border-right: 1px solid var(--border); }
+.bird-spots-manager-filters { display: grid; flex-shrink: 0; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
+.bird-spots-saved-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.bird-spots-manager .bird-spots-saved-item { min-width: 0; overflow-wrap: anywhere; }
+.bird-spots-saved-item[aria-pressed="true"] { background: #eef8f3; box-shadow: inset 3px 0 var(--active); }
+.bird-spots-note-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+.bird-spots-manager-editor { min-height: 0; min-width: 0; overflow: hidden; }
+.bird-spots-manager-editor form { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.bird-spots-manager-fields { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 16px 24px; }
+.bird-spots-manager-fields > * { flex-shrink: 0; }
+.bird-spots-manager-fields .bird-spot-eyebrow { margin: 0 0 6px; }
+.bird-spots-manager-editor h3 { margin: 0 0 10px; overflow-wrap: anywhere; }
+.bird-spots-manager-editor .field { margin: 10px 0; }
+.bird-spots-manager-editor .bird-spots-note-field { display: flex; flex-direction: column; flex: 1 0 120px; }
+.bird-spots-manager-editor textarea { flex: 1; min-height: 96px; height: 96px; max-height: 240px; width: 100%; resize: vertical; border: 1px solid var(--border); border-radius: 7px; padding: 10px; font: inherit; }
+.bird-spots-manager-editor input[readonly] { background: #f4f6f4; color: var(--muted); }
+.bird-spots-pin { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.bird-spots-manager-footer { display: flex; flex-wrap: wrap; gap: 10px 18px; flex-shrink: 0; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--panel); }
+.bird-spots-manager-footer .bird-spot-actions { margin: 0; }
+.bird-spots-manager-secondary { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
+.bird-spots-manager-secondary .danger { height: 36px; border: 1px solid #d9b8aa; border-radius: 7px; color: var(--danger); background: white; padding: 0 12px; cursor: pointer; }
+.bird-spots-leave { position: fixed; z-index: 1900; }
+.bird-spots-leave .bird-spots-dialog { width: min(510px, 100%); }
+.bird-spots-leave-body { padding: 6px 22px 22px; font-size: 14px; }
+.bird-spot-directory-warning { font-size: 13px; color: var(--danger); line-height: 1.6; }
+.bird-spot-search-item h3 { font-size: 16px; margin: 0 0 6px; }
+@media (max-width: 1200px) and (min-width: 981px) {
+  .toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .brand { grid-column: 1 / -1; }
+}
+@media (max-width: 980px) {
+  .workspace { display: block; }
+  .search { grid-template-columns: 76px minmax(180px, 1fr) 82px 66px 92px; }
+  .search-spots { grid-template-columns: 76px minmax(180px, 1fr) 66px; }
+  .bird-spots-overlay { position: fixed; }
+}

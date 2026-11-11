@@ -2,7 +2,11 @@ import L, { type Map as LeafletMap, type Marker } from "leaflet";
 import { createPortal } from "react-dom";
 import { useDesktopBirdSpots } from "../bird-spots/useDesktopBirdSpots";
 import { useBirdSpotMap } from "../bird-spots/useBirdSpotMap";
-import { BirdSpotPanel, BirdSpotMessages, SavedBirdSpots } from "../bird-spots/BirdSpotPanel";
+import { BirdSpotPanel, BirdSpotMessages, BirdSpotLeaveDialog } from "../bird-spots/BirdSpotPanel";
+import { SavedBirdSpots } from "../bird-spots/SavedBirdSpots";
+import { SearchToolbar } from "../search/SearchToolbar";
+import { useBirdSpotSearch } from "../bird-spots/useBirdSpotSearch";
+import { BirdSpotSearchResults } from "../bird-spots/BirdSpotSearchResults";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
@@ -151,6 +155,15 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
 
 export function MapWorkspace() {
   const birdSpots = useDesktopBirdSpots();
+  const [searchMode, setSearchMode] = useState<"species" | "spots">("species");
+  const spotSearch = useBirdSpotSearch();
+  const setMode = (mode: "species" | "spots") => {
+    setSearchMode(mode);
+    if (mode === "spots") {
+      window.dispatchEvent(new Event("search:invalidate"));
+      birdSpots.showSpotResults();
+    } else birdSpots.resetForSearch();
+  };
   const birdSpotsRef = useRef(birdSpots);
   birdSpotsRef.current = birdSpots;
   const resultListRef = useRef<HTMLDivElement>(null);
@@ -225,6 +238,7 @@ export function MapWorkspace() {
 
   useEffect(() => {
     const handleResults = (event: Event) => {
+      setSearchMode("species");
       birdSpotsRef.current.resetForSearch();
       const result = (event as CustomEvent<SearchResult>).detail;
       const pending = pendingNotificationRef.current;
@@ -254,6 +268,7 @@ export function MapWorkspace() {
       const failure = (event as CustomEvent<SearchFailedEvent["error"]>).detail;
       if (failure.source !== "explicit" || failure.phase !== "species-resolution") return;
 
+      setSearchMode("species");
       birdSpotsRef.current.resetForSearch();
       speciesRef.current = null;
       observationsRef.current = [];
@@ -267,9 +282,9 @@ export function MapWorkspace() {
     const handleTrackers = (event: Event) => {
       trackersRef.current = (event as CustomEvent<{ trackers: Tracker[] }>).detail.trackers;
     };
-    const handleNotification = async (event: Event) => {
+    const applyNotification = async (selected: ObservationEvent) => {
+      setSearchMode("species");
       birdSpotsRef.current.resetForSearch();
-      const selected = (event as CustomEvent<ObservationEvent>).detail;
       let pendingRequestId: string | null = null;
       try {
         if (speciesRef.current?.speciesCode !== selected.species.speciesCode) {
@@ -304,6 +319,10 @@ export function MapWorkspace() {
         }
         publishStatus(error instanceof Error ? error.message : "通知定位失敗", true);
       }
+    };
+    const handleNotification = (event: Event) => {
+      const selected = (event as CustomEvent<ObservationEvent>).detail;
+      birdSpotsRef.current.requestLeave({ kind: "notification", run: () => { void applyNotification(selected); } });
     };
     window.addEventListener("search:results", handleResults);
     window.addEventListener("search:failed", handleFailedSearch);
@@ -377,6 +396,7 @@ export function MapWorkspace() {
       button.disabled = !birdSpots.available || birdSpots.pending.has(locId);
     });
   }, [birdSpots.collection, birdSpots.pending, birdSpots.available]);
+  const searchTarget = document.getElementById("search-root");
   const toolbarTarget = document.getElementById("bird-spots-root");
   const activeObservation = activeIndex >= 0 ? observations[activeIndex] : null;
   const birdCount = useMemo(
@@ -396,7 +416,9 @@ export function MapWorkspace() {
   return (
     <main className="workspace">
       {toolbarTarget && createPortal(<button className="secondary bird-spots-toolbar-button" onClick={birdSpots.showSaved}>☆ 我的鳥點{birdSpots.available ? ` ${birdSpots.spots.length}` : ""}</button>, toolbarTarget)}
+      {searchTarget && createPortal(<SearchToolbar mode={searchMode} setMode={setMode} spotSearch={spotSearch} requestLeave={birdSpots.requestLeave} />, searchTarget)}
       <BirdSpotMessages model={birdSpots} />
+      <BirdSpotLeaveDialog model={birdSpots} />
       <SavedBirdSpots model={birdSpots} />
       <section className="map-shell">
         <div ref={mapNodeRef} id="map" aria-label="鳥種觀察位置地圖" />
@@ -441,7 +463,7 @@ export function MapWorkspace() {
       </section>
 
       {hasPublishedResult && (
-        <aside className="side" hidden={birdSpots.view.kind === "detail"} aria-label="鳥種搜尋結果">
+        <aside className="side" hidden={birdSpots.workspaceView.kind !== "results"} aria-label="鳥種搜尋結果">
           <section className="summary">
             <div className="metric result-count">
               <strong>{observations.length}</strong>
@@ -486,6 +508,7 @@ export function MapWorkspace() {
           </div>
         </aside>
       )}
+      <BirdSpotSearchResults search={spotSearch} model={birdSpots} />
       <BirdSpotPanel model={birdSpots} />
     </main>
   );

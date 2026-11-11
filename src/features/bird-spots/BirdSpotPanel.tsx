@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { BirdSpot } from "../../types/domain";
 import type { DesktopBirdSpots } from "./useDesktopBirdSpots";
+import { Dialog } from "./Dialog";
 
 export const spotName = (spot: BirdSpot) => spot.locName || spot.locId;
 const locationType = (spot: BirdSpot) => spot.locationType === "hotspot" ? "公共熱點" : spot.locationType === "personal" ? "個人地點" : "地點類型未知";
 export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
   const [drafts, setDrafts] = useState<Record<string, { value: string; baseline: string; generation: number }>>({});
+  const draftRef = useRef(drafts);
+  draftRef.current = drafts;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editRevision = useRef(0);
   const { view, recent } = model;
@@ -17,12 +20,6 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
     textareaRef.current?.focus({ preventScroll: true });
     textareaRef.current?.scrollIntoView({ block: "nearest" });
   }, [editing, locId]);
-  model.beforeLeave.current = () => {
-    if (!locId || !editor) return true;
-    if (editor.value !== editor.baseline && !window.confirm("捨棄尚未儲存的筆記？")) return false;
-    setDrafts(previous => { const next = { ...previous }; delete next[locId]; return next; });
-    return true;
-  };
   if (view.kind !== "detail") return null;
   const spot = model.detailSpot || view.spot, favorite = model.saved(spot.locId);
   const rows = recent.kind === "ready" ? recent.response.observations.filter(o => !model.onlySpecies || o.speciesCode === view.species?.speciesCode) : [];
@@ -33,11 +30,12 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
     }
     else { textareaRef.current?.focus({ preventScroll: true }); textareaRef.current?.scrollIntoView({ block: "nearest" }); }
   };
-  const saveDraft = () => {
-    if (!editor) return;
+  const saveDraft = async (): Promise<boolean> => {
+    if (!editor) return true;
     const submitted = { ...editor }, id = spot.locId;
-    void model.saveNote(spot, submitted.value).then(ok => {
-      if (!ok) return;
+    const ok = await model.saveNote(spot, submitted.value);
+    if (!ok) return false;
+    const unchanged = draftRef.current[spot.locId]?.generation === submitted.generation;
       setDrafts(previous => {
         const current = previous[id];
         if (!current) return previous;
@@ -46,8 +44,10 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
         else next[id] = { ...current, baseline: submitted.value };
         return next;
       });
-    });
+    return unchanged;
   };
+  const discard = () => setDrafts(previous => { const next = { ...previous }; delete next[spot.locId]; return next; });
+  model.editor.current = { key: `detail:${spot.locId}`, dirty: Boolean(editor && editor.value !== editor.baseline), save: saveDraft, discard };
   return <aside className="side bird-spot-panel" aria-label="鳥點詳情">
     <header className="bird-spot-heading">
       <button className="text-btn bird-spot-back" onClick={model.back}>← {view.origin === "saved" ? "返回我的鳥點" : "返回搜尋結果"}</button>
@@ -56,7 +56,7 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
       {favorite?.alias && <p className="bird-spot-meta">{spotName(spot)}</p>}
       <p className="bird-spot-meta">{locationType(spot)} · {spot.locId}</p>
       <div className="bird-spot-actions">
-        <button className="primary" disabled={!model.available || model.pending.has(spot.locId)} onClick={() => void model.toggle(spot)}>{favorite ? "★ 已收藏" : "☆ 收藏鳥點"}</button>
+        <button className="primary" disabled={!model.available || model.pending.has(spot.locId)} onClick={() => model.requestLeave({ kind: "remove", run: () => { void model.toggle(spot); } })}>{favorite ? "★ 已收藏" : "☆ 收藏鳥點"}</button>
         <button className="secondary" disabled={!model.available} onClick={beginEditing}>編輯筆記</button>
         {spot.lat !== null && spot.lng !== null && <a className="selected-link" href={`https://www.google.com/maps?q=${spot.lat},${spot.lng}`} target="_blank" rel="noreferrer">Google Maps ↗</a>}
       </div>
@@ -72,30 +72,15 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
       {recent.kind === "error" && <div className="bird-spot-error" role="alert"><p>{recent.message}</p><button className="secondary" onClick={model.refresh}>重試查詢</button></div>}
       {recent.kind === "ready" && !rows.length && <div className="empty">最近 {model.days} 天沒有可取得的公開紀錄。這不代表此地沒有鳥；收藏與筆記仍會保留。</div>}
       {rows.map(o => <article className="bird-spot-observation" key={`${o.speciesCode}:${o.subId}`}><div><strong><a href={`https://ebird.org/species/${encodeURIComponent(o.speciesCode)}`} target="_blank" rel="noreferrer">{o.comName || o.sciName || o.speciesCode} ↗</a></strong><span>{o.howMany === null ? "數量未知" : `${o.howMany} 隻`}</span></div><div className="bird-spot-meta"><span>{o.obsDt}</span><a href={`https://ebird.org/checklist/${encodeURIComponent(o.subId)}`} target="_blank" rel="noreferrer">Checklist ↗</a></div></article>)}
-      <section className="bird-spot-notes"><strong>我的筆記</strong>{editing ? <form onSubmit={e => { e.preventDefault(); saveDraft(); }}><label className="screen-reader-status" htmlFor="bird-spot-note">鳥點筆記</label><textarea id="bird-spot-note" ref={textareaRef} value={editor.value} onChange={e => { const value = e.target.value, generation = ++editRevision.current; setDrafts(previous => { const current = previous[spot.locId]; return current ? { ...previous, [spot.locId]: { ...current, value, generation } } : previous; }); }} /><div className="bird-spot-actions"><button className="primary" disabled={model.pending.has(spot.locId)}>儲存筆記{favorite ? "" : "並收藏"}</button><button type="button" className="secondary" onClick={() => setDrafts(previous => { const next = { ...previous }; delete next[spot.locId]; return next; })}>取消編輯</button></div></form> : <p>{favorite?.note || "尚未加入筆記"}</p>}</section>
+      <section className="bird-spot-notes"><strong>我的筆記</strong>{editing ? <form onSubmit={e => { e.preventDefault(); saveDraft(); }}><label className="screen-reader-status" htmlFor="bird-spot-note">鳥點筆記</label><textarea id="bird-spot-note" ref={textareaRef} value={editor.value} onChange={e => { const value = e.target.value, generation = ++editRevision.current; setDrafts(previous => { const current = previous[spot.locId]; return current ? { ...previous, [spot.locId]: { ...current, value, generation } } : previous; }); }} /><div className="bird-spot-actions"><button className="primary" disabled={model.pending.has(spot.locId)}>儲存筆記{favorite ? "" : "並收藏"}</button><button type="button" className="secondary" onClick={() => model.requestLeave({ kind: "cancel-edit", run: discard })}>取消編輯</button></div></form> : <p>{favorite?.note || "尚未加入筆記"}</p>}</section>
     </div>
   </aside>;
 }
 
-export function SavedBirdSpots({ model }: { model: DesktopBirdSpots }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (model.view.kind !== "saved") return;
-    const previous = document.activeElement;
-    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); model.showResults(); }
-      if (event.key !== "Tab") return;
-      const buttons = [...(dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
-      const first = buttons[0], last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    };
-    document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("keydown", keydown); if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, [model.view.kind, model.showResults]);
-  if (model.view.kind !== "saved") return null;
-  return <div className="bird-spots-overlay" onClick={e => { if (e.target === e.currentTarget) model.showResults(); }}><section ref={dialogRef} className="bird-spots-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-bird-spots-title"><header><div><h2 id="saved-bird-spots-title">我的鳥點</h2><p className="bird-spot-meta">{model.available ? `${model.spots.length} 個收藏 · ` : ""}保存在這台電腦</p></div><button className="secondary" onClick={model.showResults}>關閉</button></header><div className="bird-spots-saved-list">{model.collection.kind === "loading" ? <p className="empty">正在讀取收藏…</p> : model.collection.kind === "error" ? <div className="bird-spot-error" role="alert"><p>{model.collection.message}</p><button className="secondary" onClick={() => void model.loadCollection()}>重試讀取收藏</button></div> : model.spots.length ? model.spots.map(spot => <button key={spot.locId} className="bird-spots-saved-item" onClick={() => model.open(spot, null, "saved")}><strong>{spot.alias || spotName(spot)}</strong><span className="bird-spot-meta">{locationType(spot)} · {spot.locId}</span><span className="bird-spot-meta">查看近期鳥種 →</span></button>) : <p className="empty">尚未收藏鳥點。從觀察紀錄點選「收藏鳥點」即可加入。</p>}</div></section></div>;
+export function BirdSpotLeaveDialog({ model }: { model: DesktopBirdSpots }) {
+  if (model.leave.kind === "idle") return null;
+  const saving = model.leave.kind === "saving";
+  return <Dialog titleId="bird-spot-leave-title" className="bird-spots-leave" onClose={() => { if (!saving) void model.resolveLeave("continue"); }}><header><h2 id="bird-spot-leave-title">尚未儲存的修改</h2></header><div className="bird-spots-leave-body"><p>先儲存修改、捨棄修改，或繼續編輯。</p>{model.actionError && <p role="alert">{model.actionError}</p>}<div className="bird-spot-actions"><button className="primary" disabled={saving} onClick={() => void model.resolveLeave("save")}>{saving ? "儲存中…" : "儲存並繼續"}</button><button className="secondary" disabled={saving} onClick={() => void model.resolveLeave("discard")}>捨棄修改</button><button className="secondary" disabled={saving} onClick={() => void model.resolveLeave("continue")}>繼續編輯</button></div></div></Dialog>;
 }
 
 export function BirdSpotMessages({ model }: { model: DesktopBirdSpots }) {

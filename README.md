@@ -142,6 +142,12 @@ Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的
 
 資料規則、Node CRUD API、IndexedDB transaction 與驗證界線見 [鳥點收藏保存契約](docs/saved-bird-spot-storage.md)。
 
+## Desktop 鳥點
+
+Desktop 與本機 Web 可從觀察卡或地圖 popup 收藏鳥點，再查看同一地點最近 1–30 天各鳥種的最新紀錄。右上「我的鳥點」可重新開啟收藏；詳情提供筆記編輯與取消收藏復原。舊紀錄缺少地點 ID 時需重新搜尋，鳥點查詢不修改鳥種 Search Baseline。操作、驗證與實際 Electron 畫面見 [Desktop 鳥點功能](docs/desktop-bird-spots.md)。
+
+本階段尚未交付鳥點名稱搜尋、完整收藏管理或匯入匯出；Search App 的鳥點畫面也由後續 tickets 接入。
+
 ## Production web build
 
 ```bash

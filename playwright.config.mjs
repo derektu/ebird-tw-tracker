@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: /desktop-search-failure\.spec\.mjs/,
+  testIgnore: /desktop-.*\.spec\.mjs/,
   use: {
     baseURL: "http://127.0.0.1:7082",
     browserName: "chromium",

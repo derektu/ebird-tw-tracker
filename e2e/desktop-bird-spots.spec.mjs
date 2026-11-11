@@ -4,7 +4,7 @@ const species = { speciesCode: "grpsni1", comName: "彩鷸", sciName: "Rostratul
 const record = { ...species, locId: "L123", locName: "桌面鳥點測試－高美", obsDt: "2026-11-11 07:30", howMany: 2, subId: "S123", lat: 24.31, lng: 120.55, locationPrivate: false, obsValid: true, obsReviewed: false };
 const spot = { locId: record.locId, locName: record.locName, lat: record.lat, lng: record.lng, locationType: "hotspot" };
 const favorite = { ...spot, alias: "", note: "保留的筆記", pinned: false, savedAt: "2026-11-11T01:00:00.000Z", updatedAt: "2026-11-11T01:00:00.000Z" };
-const recent = locId => ({ locId, days: 14, generatedAt: "2026-11-11T02:30:00.000Z", observations: [
+const recent = (locId, days = 3) => ({ locId, days, generatedAt: "2026-11-11T02:30:00.000Z", observations: [
   { ...record, locId, locationType: "hotspot" },
   { ...record, locId, speciesCode: "litegr", comName: "小白鷺", subId: "S124", howMany: 8 },
 ] });
@@ -19,7 +19,7 @@ async function install(page, { records = [record, { ...record, subId: "S125" }],
   await page.route("**/api/events?since=0", r => r.fulfill({ json: { events: [], unreadCount: 0 } }));
   await page.route("**/api/search-snapshot-sessions", r => r.fulfill({ json: {} }));
   await page.route("**/api/search-snapshots*", r => { if (r.request().method() === "PUT") baselineWrites++; return r.fulfill({ json: r.request().method() === "PUT" ? { committed: true } : { snapshot: null } }); });
-  await page.route("**/api/bird-spots/observations*", r => onRecent ? onRecent(r) : r.fulfill({ json: recent(new URL(r.request().url()).searchParams.get("locId")) }));
+  await page.route("**/api/bird-spots/observations*", r => onRecent ? onRecent(r) : r.fulfill({ json: recent(new URL(r.request().url()).searchParams.get("locId"), Number(new URL(r.request().url()).searchParams.get("days"))) }));
   await page.route("**/api/bird-spots/saved**", r => {
     const req = r.request(), resource = new URL(req.url()).pathname.split("/saved")[1];
     if (req.method() === "GET") return r.fulfill({ json: { spots: savedSpots } });
@@ -57,7 +57,7 @@ test("Desktop card and popup favorites stay in sync, detail returns without refe
   await expect(detail.locator('.bird-spot-observation')).toHaveCount(2);
   await expect(page.locator('.bird-spot-marker')).toHaveCount(1);
   await expect(page.locator('.bird-marker')).toHaveCount(0);
-  await expect(detail.getByLabel('鳥點最近天數')).toHaveValue('14');
+  await expect(detail.getByLabel('鳥點最近天數')).toHaveValue('3');
   await detail.getByRole('button', { name: '只看彩鷸' }).click();
   await expect(detail.locator('.bird-spot-observation')).toHaveCount(1);
   await detail.getByRole('button', { name: '編輯筆記' }).click();
@@ -298,4 +298,60 @@ test("a cancelled and reopened same-location note session cannot be closed by it
   const reopened = page.getByRole('textbox', { name: '鳥點筆記' }); await reopened.fill('新工作階段的草稿');
   release(); await expect(page.getByRole('status')).toHaveText('已儲存筆記');
   await expect(reopened).toHaveValue('新工作階段的草稿');
+});
+
+test("bird-spot entry requests3days from popup, card and favorites and resets manual ranges", async ({ page }) => {
+  const requestedDays = [];
+  await install(page, { saved: [favorite], onRecent: route => {
+    const query = new URL(route.request().url()).searchParams;
+    const days = Number(query.get('days'));
+    requestedDays.push(days);
+    return route.fulfill({ json: recent(query.get('locId'), days) });
+  } });
+  const detail = page.getByRole('complementary', { name: '鳥點詳情' });
+  const daysInput = detail.getByLabel('鳥點最近天數');
+  await page.locator('.bird-marker').last().click();
+  await page.locator('.leaflet-popup').getByRole('button', { name: '查看鳥點' }).click();
+  await expect(daysInput).toHaveValue('3');
+  await expect.poll(() => requestedDays.at(-1)).toBe(3);
+  await daysInput.fill('30');
+  await expect.poll(() => requestedDays.at(-1)).toBe(30);
+  await detail.getByRole('button', { name: '返回搜尋結果' }).click();
+  await page.locator('.item').first().getByRole('button', { name: '查看鳥點' }).click();
+  await expect(daysInput).toHaveValue('3');
+  await expect.poll(() => requestedDays.at(-1)).toBe(3);
+  await daysInput.fill('1');
+  await expect.poll(() => requestedDays.at(-1)).toBe(1);
+  await detail.getByRole('button', { name: '返回搜尋結果' }).click();
+  await page.getByRole('button', { name: /我的鳥點/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /桌面鳥點測試/ }).click();
+  await expect(daysInput).toHaveValue('3');
+  await expect.poll(() => requestedDays.at(-1)).toBe(3);
+  await daysInput.fill('14');
+  await expect.poll(() => requestedDays.at(-1)).toBe(14);
+  await detail.getByRole('button', { name: '返回我的鳥點' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /桌面鳥點測試/ }).click();
+  await expect(daysInput).toHaveValue('3');
+  await expect.poll(() => requestedDays).toEqual([3, 30, 3, 1, 3, 14, 3]);
+});
+
+test("each bird name links to its eBird species page with name fallbacks and keeps checklist links", async ({ page }) => {
+  const rows = [
+    { ...record, locationType: 'hotspot' },
+    { ...record, speciesCode: 'litegr', comName: null, sciName: 'Egretta garzetta', subId: 'S124', locationType: 'hotspot' },
+    { ...record, speciesCode: 'test/code', comName: null, sciName: null, subId: 'S125', locationType: 'hotspot' },
+  ];
+  await install(page, { onRecent: route => route.fulfill({ json: { ...recent('L123'), observations: rows } }) });
+  await page.locator('.item').first().getByRole('button', { name: '查看鳥點' }).click();
+  const detail = page.getByRole('complementary', { name: '鳥點詳情' });
+  const links = detail.locator('.bird-spot-observation strong a');
+  await expect(links).toHaveText(['彩鷸 ↗', 'Egretta garzetta ↗', 'test/code ↗']);
+  for (const [index, code] of ['grpsni1', 'litegr', 'test%2Fcode'].entries()) {
+    await expect(links.nth(index)).toHaveAttribute('href', `https://ebird.org/species/${code}`);
+    await expect(links.nth(index)).toHaveAttribute('target', '_blank');
+    await expect(links.nth(index)).toHaveAttribute('rel', 'noreferrer');
+  }
+  const checklists = detail.getByRole('link', { name: 'Checklist ↗', exact: true });
+  await expect(checklists).toHaveCount(3);
+  await expect(checklists.first()).toHaveAttribute('href', 'https://ebird.org/checklist/S123');
 });

@@ -1,4 +1,5 @@
-import { confirmBirdSpotExit } from "../bird-spots/navigation";
+import type { BirdSpotIntent } from "../bird-spots/navigation";
+import type { BirdSpotSearch } from "../bird-spots/useBirdSpotSearch";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Species } from "../../types/domain";
@@ -18,7 +19,7 @@ function publishStatus(message: string, isError = false) {
   window.dispatchEvent(new CustomEvent("app:status", { detail: { message, isError } }));
 }
 
-export function SearchToolbar() {
+export function SearchToolbar({ mode, setMode, spotSearch, requestLeave }: { mode: "species" | "spots"; setMode(mode: "species" | "spots"): void; spotSearch: BirdSpotSearch; requestLeave(intent: BirdSpotIntent): void }) {
   const [query, setQuery] = useState("彩鷸");
   const [days, setDays] = useState(3);
   const [selectedSpecies, setSelectedSpecies] = useState<Species | null>(null);
@@ -187,13 +188,13 @@ export function SearchToolbar() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!confirmBirdSpotExit()) return;
+    if (mode === "spots") { requestLeave({ kind: "search", run: () => { setMode("spots"); void spotSearch.search(); } }); return; }
     const normalizedQuery = query.trim();
     const species = selectedSpecies &&
       (normalizedQuery === selectedSpecies.comName || normalizedQuery === selectedSpecies.speciesCode)
       ? selectedSpecies
       : undefined;
-    void workflow.run({ source: "explicit", species, query: species ? undefined : normalizedQuery, days });
+    requestLeave({ kind: "search", run: () => { void workflow.run({ source: "explicit", species, query: species ? undefined : normalizedQuery, days }); } });
   }
 
   async function addTracking() {
@@ -206,7 +207,9 @@ export function SearchToolbar() {
   }
 
   return (
-    <form className="search" onSubmit={submitSearch}>
+    <form className={`search search-${mode}`} onSubmit={submitSearch}>
+      <label className="field search-mode"><span>搜尋模式</span><select aria-label="搜尋模式" value={mode} onChange={event => { const value = event.target.value; if (value === "species" || value === "spots") requestLeave({ kind: "mode", run: () => setMode(value) }); }}><option value="species">鳥種</option><option value="spots">鳥點</option></select></label>
+      {mode === "spots" ? <label className="field species-field"><span>鳥點名稱</span><input value={spotSearch.query} onChange={event => spotSearch.setQuery(event.target.value)} placeholder="輸入鳥點名稱、別名或地區代碼" /></label> : <>
       <label className="field species-field" ref={fieldRef}>
         <span>鳥種</span>
         <input
@@ -236,8 +239,9 @@ export function SearchToolbar() {
         <span>最近天數</span>
         <input type="number" min="1" max="30" value={days} onChange={(event) => setDays(Number(event.target.value))} />
       </label>
-      <button className="primary" type="submit" disabled={busy}>搜尋</button>
-      <button className="secondary" type="button" disabled={busy} onClick={() => void addTracking()}>加入追蹤</button>
+      </>}
+      <button className="primary" type="submit" disabled={mode === "species" && busy}>搜尋</button>
+      {mode === "species" && <button className="secondary" type="button" disabled={busy} onClick={() => void addTracking()}>加入追蹤</button>}
     </form>
   );
 }

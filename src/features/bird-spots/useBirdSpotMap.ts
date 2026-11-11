@@ -23,7 +23,7 @@ export function useBirdSpotMap({ model, mapRef, entriesRef, listRef }: {
     }
     snapshot.current = null;
   };
-  const { view, recent } = model;
+  const { workspaceView: view, recent } = model;
   const spot = model.detailSpot;
   const metadata = recent.kind === "ready" && recent.response.locId === spot?.locId ? recent.response.observations.find(o => o.lat !== null && o.lng !== null) : null;
   const lat = spot?.lat ?? metadata?.lat ?? null;
@@ -48,6 +48,8 @@ export function useBirdSpotMap({ model, mapRef, entriesRef, listRef }: {
       window.requestAnimationFrame(() => { if (listRef.current) listRef.current.scrollTop = scrollTop; });
       snapshot.current = null;
     }
+    if (view.kind === "spot-results") entriesRef.current.forEach(entry => map.removeLayer(entry.marker));
+    else if (view.kind === "results") entriesRef.current.forEach(entry => entry.marker.addTo(map));
   }, [view, lat, lng, mapRef, entriesRef, listRef]);
   useEffect(() => () => { marker.current?.remove(); }, []);
   return { hasCoordinates: lat !== null && lng !== null };

@@ -108,7 +108,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-`npm run check:all` 執行既有 Desktop check、Worker tests 與 Search App browser tests。
+`npm run check:all` 執行 Desktop check、Worker tests、Search App 與 Desktop browser tests。
 
 完整的自行部署、production-like preview、更新、桌面／手機驗證與 Cloudflare 用量責任，見 [Cloudflare Search App 部署指南](docs/cloudflare-deployment.md)。使用 browser-owned key 前，請先閱讀 [Search App API key 安全說明](docs/api-key-security.md)。
 
@@ -138,15 +138,15 @@ Node 與 Search App Worker 提供 `GET /api/bird-spots/observations?locId=L11045
 
 ## 鳥點收藏保存
 
-Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除；本階段提供保存能力，畫面由後續鳥點 tickets 接入。
+Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除。Desktop 已接入鳥點搜尋與收藏管理；Search App 畫面由後續票接入。
 
 資料規則、Node CRUD API、IndexedDB transaction 與驗證界線見 [鳥點收藏保存契約](docs/saved-bird-spot-storage.md)。
 
 ## Desktop 鳥點
 
-Desktop 與本機 Web 可從觀察卡或地圖 popup 收藏鳥點，再查看同一地點最近 1–30 天各鳥種的最新紀錄。右上「我的鳥點」可重新開啟收藏；詳情提供筆記編輯與取消收藏復原。舊紀錄缺少地點 ID 時需重新搜尋，鳥點查詢不修改鳥種 Search Baseline。操作、驗證與實際 Electron 畫面見 [Desktop 鳥點功能](docs/desktop-bird-spots.md)。
+Desktop 與本機 Web 可從觀察卡、地圖 popup 或鳥點名稱搜尋收藏鳥點，再查看同一地點最近 1–30 天各鳥種的最新紀錄。右上「我的鳥點」提供收藏搜尋、排序、別名、筆記與釘選管理。未儲存修改可選擇儲存、捨棄或繼續編輯；取消收藏提供復原。舊紀錄缺少地點 ID 時需重新搜尋，鳥點查詢不修改鳥種 Search Baseline。操作與驗證見 [Desktop 鳥點功能](docs/desktop-bird-spots.md)。
 
-本階段尚未交付鳥點名稱搜尋、完整收藏管理或匯入匯出；Search App 的鳥點畫面也由後續 tickets 接入。
+匯入匯出與 Search App 鳥點畫面由後續 tickets 交付。
 
 ## Production web build
 
@@ -250,7 +250,7 @@ docs/       開發與架構文件
 | `npm run test:search-bundle` | 確認 Search production bundle 不含 Desktop-only runtime code |
 | `npm run test:integration` | 使用 fake key 驗證真實 eBird API 的拒絕路徑；沒有本機 key 時略過 valid path |
 | `npm run test:integration:required` | 要求 `EBIRD_API_KEY` 的真實 eBird valid-path verification |
-| `npm run test:browser` | 驗證 Search App API key gate 的瀏覽器可見流程 |
+| `npm run test:browser` | 驗證 Search App 與 Desktop 的瀏覽器操作流程 |
 | `npm run check:all` | Desktop、Worker 與 Search App 完整檢查 |
 | `npm run electron:pack` | 建立 macOS ad-hoc signed unpacked app |
 | `npm run electron:build:mac` | 建立目前架構的 macOS ad-hoc signed DMG |

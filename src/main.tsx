@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { NotificationCenter } from "./features/events/NotificationCenter";
 import { MapWorkspace } from "./features/map/MapWorkspace";
-import { SearchToolbar } from "./features/search/SearchToolbar";
 import { SettingsFeature } from "./features/settings/SettingsFeature";
 import { MenuBarPreview, StatusDisplay } from "./features/shell/ShellFeatures";
 import { TrackerManager } from "./features/tracking/TrackerManager";
@@ -24,11 +23,6 @@ const workspaceRoot = document.getElementById("workspace-root");
 if (!workspaceRoot) throw new Error("Missing workspace root");
 
 createRoot(workspaceRoot).render(<MapWorkspace />);
-
-const searchRoot = document.getElementById("search-root");
-if (!searchRoot) throw new Error("Missing search root");
-
-createRoot(searchRoot).render(<SearchToolbar />);
 
 const settingsRoot = document.getElementById("settings-root");
 if (!settingsRoot) throw new Error("Missing settings root");

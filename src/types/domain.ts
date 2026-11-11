@@ -57,3 +57,19 @@ export interface BirdSpotRecentResponse {
   generatedAt: string;
   observations: BirdSpotObservation[];
 }
+
+export interface SavedBirdSpot extends BirdSpot {
+  alias: string;
+  note: string;
+  pinned: boolean;
+  savedAt: string;
+  updatedAt: string;
+}
+export type SavedBirdSpotSort = "pinned" | "recent" | "name";
+export interface SavedBirdSpotStore {
+  list(options?: { sort?: SavedBirdSpotSort }): Promise<SavedBirdSpot[]>;
+  save(spot: BirdSpot): Promise<SavedBirdSpot>;
+  update(locId: string, changes: Partial<Pick<SavedBirdSpot, "alias" | "note" | "pinned">>): Promise<SavedBirdSpot>;
+  remove(locId: string): Promise<SavedBirdSpot | null>;
+  restore(spot: SavedBirdSpot): Promise<SavedBirdSpot>;
+}

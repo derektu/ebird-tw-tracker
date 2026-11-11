@@ -136,6 +136,12 @@ Node 與 Search App Worker 提供 `GET /api/bird-spots/observations?locId=L11045
 
 `npm run test:integration` 在 process 已提供 `EBIRD_API_KEY` 時，會動態選一個公共熱點及公開個人地點，驗證 1、14、30 天查詢；沒有 key 時明確 skip。`test:integration:required` 要求 key。兩種指令都不自動讀取 `.env`，以免意外在一般測試中使用個人憑證。
 
+## 鳥點收藏保存
+
+Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除；本階段提供保存能力，畫面由後續鳥點 tickets 接入。
+
+資料規則、Node CRUD API、IndexedDB transaction 與驗證界線見 [鳥點收藏保存契約](docs/saved-bird-spot-storage.md)。
+
 ## Production web build
 
 ```bash

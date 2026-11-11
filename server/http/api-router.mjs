@@ -1,3 +1,4 @@
+import { SavedBirdSpotError } from "../../src/domain/saved-bird-spots.mjs";
 import { BirdSpotError, readBirdSpotQuery } from "../../src/domain/bird-spots.mjs";
 import { normalizeSpecies } from "../domain/species.mjs";
 import { createSearchScope } from "../../src/domain/search-discovery.mjs";
@@ -23,7 +24,7 @@ export function readBody(request) {
   });
 }
 
-export function createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots }) {
+export function createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots }) {
   return async function handleApi(request, response, url) {
     if (url.pathname === "/api/settings/api-key" && request.method === "GET") {
       jsonResponse(response, 200, await settings.status());
@@ -57,6 +58,33 @@ export function createApiRouter({ settings, species, observations, tracking, sea
         return;
       }
       jsonResponse(response, 200, { saved: await species.save(normalized) });
+      return;
+    }
+    const savedSpotMatch = url.pathname.match(/^\/api\/bird-spots\/saved(?:\/([^/]+))?$/);
+    if (savedSpotMatch) {
+      try {
+        const resource = savedSpotMatch[1];
+        if (!resource && request.method === "GET") {
+          if ([...url.searchParams.keys()].some(key => key !== "sort") || url.searchParams.getAll("sort").length > 1) {
+            throw new SavedBirdSpotError("invalid_saved_bird_spot", "收藏查詢只接受單一 sort");
+          }
+          jsonResponse(response, 200, { spots: await savedBirdSpots.list({ sort: url.searchParams.get("sort") ?? "pinned" }) });
+        } else if (!resource && request.method === "POST") {
+          const body = JSON.parse(await readBody(request));
+          jsonResponse(response, 200, { spot: await savedBirdSpots.save(body?.spot) });
+        } else if (resource === "restore" && request.method === "POST") {
+          const body = JSON.parse(await readBody(request));
+          jsonResponse(response, 200, { spot: await savedBirdSpots.restore(body?.spot) });
+        } else if (resource && resource !== "restore" && request.method === "PATCH") {
+          jsonResponse(response, 200, { spot: await savedBirdSpots.update(resource, JSON.parse(await readBody(request))) });
+        } else if (resource && resource !== "restore" && request.method === "DELETE") {
+          jsonResponse(response, 200, { removed: await savedBirdSpots.remove(resource) });
+        } else throw new SavedBirdSpotError("method_not_allowed", "不支援的收藏操作", 405);
+      } catch (error) {
+        if (error instanceof SyntaxError) jsonResponse(response, 400, { code: "invalid_json", error: "請提供有效的 JSON" });
+        else if (error instanceof SavedBirdSpotError) jsonResponse(response, error.statusCode, { code: error.code, error: error.message });
+        else throw error;
+      }
       return;
     }
     if (url.pathname === "/api/bird-spots/observations") {

@@ -12,6 +12,8 @@ data/seen-observations.json
 data/events.json
 data/settings.json
 data/search-snapshots.json
+data/saved-bird-spots.json
+data/saved-bird-spots.json.pending-*
 painted-snipe-map.html
 node_modules/
 dist/

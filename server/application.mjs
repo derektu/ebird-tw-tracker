@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { createApiRouter, jsonResponse } from "./http/api-router.mjs";
 import { createEbirdClient, validateApiKey } from "./services/ebird-client.mjs";
+import { createFileSavedBirdSpotStore } from "./storage/saved-bird-spot-store.mjs";
 import { createBirdSpotService } from "./services/bird-spot-service.mjs";
 import { createObservationService } from "./services/observation-service.mjs";
 import { createSettingsService } from "./services/settings-service.mjs";
@@ -35,9 +36,11 @@ export async function createApplication({
   searchSnapshotStore,
   viteHmr = true,
   birdSpotFetch = fetch,
+  savedBirdSpotStore,
 } = {}) {
   const paths = {
     savedSpecies: path.join(dataDir, "saved-species.json"),
+    savedBirdSpots: path.join(dataDir, "saved-bird-spots.json"),
     trackers: path.join(dataDir, "trackers.json"),
     seen: path.join(dataDir, "seen-observations.json"),
     events: path.join(dataDir, "events.json"),
@@ -67,7 +70,8 @@ export async function createApplication({
     onStateChange: onTrackingStateChange,
   });
   const searchSnapshots = searchSnapshotStore ?? createSearchSnapshotStore({ filePath: paths.searchSnapshots });
-  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots });
+  const savedBirdSpots = savedBirdSpotStore ?? createFileSavedBirdSpotStore({ filePath: paths.savedBirdSpots });
+  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots });
 
   let vite = null;
   if (!isProduction) {
@@ -140,5 +144,5 @@ export async function createApplication({
     await vite?.close();
   }
 
-  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots, birdSpots } };
+  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots, birdSpots, savedBirdSpots } };
 }

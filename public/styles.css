@@ -42,13 +42,14 @@ select {
 
 .app-shell {
   position: relative;
+  overflow-x: clip;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, .65fr) minmax(520px, 1.45fr) auto;
+  grid-template-columns: minmax(190px, .65fr) minmax(500px, 1.45fr) auto;
   gap: 14px;
   align-items: end;
   padding: 10px 14px;
@@ -1114,3 +1115,50 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Desktop bird spots share the existing workspace and toolbar. */
+#bird-spots-root { display: contents; }
+.top-actions { align-items: flex-end; }
+.bird-spots-toolbar-button { white-space: nowrap; }
+.item-select { display: block; width: 100%; border: 0; background: transparent; text-align: left; color: inherit; padding: 0; cursor: pointer; font: inherit; }
+.item-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.bird-spot-card-actions, .bird-spot-popup-actions, .bird-spot-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.bird-spot-card-actions button, .bird-spot-popup-actions button { height: 30px; font-size: 12px; }
+.bird-spot-legacy { color: var(--private); font-size: 12px; margin: 8px 0 0; }
+.bird-spot-panel { min-height: 0; }
+.bird-spot-heading { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.bird-spot-back { color: var(--active); border: 0; padding: 0; background: transparent; font-size: 13px; }
+.bird-spot-eyebrow { color: var(--active); font-size: 12px; margin: 16px 0 6px; }
+.bird-spot-heading h2 { font-size: 19px; line-height: 1.45; margin: 0 0 6px; }
+.bird-spot-meta { color: var(--muted); font-size: 12px; line-height: 1.65; margin: 4px 0; }
+.bird-spot-actions button, .bird-spot-actions a { font-size: 12px; height: 32px; }
+.bird-spot-controls { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.bird-spot-query-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bird-spot-query-row strong { margin-right: auto; }
+.bird-spot-query-row label { color: var(--muted); white-space: nowrap; font-size: 12px; }
+.bird-spot-query-row input { width: 48px; height: 32px; border: 1px solid var(--border); border-radius: 6px; font: inherit; padding: 0 5px; }
+.bird-spot-query-row button { height: 32px; font-size: 12px; }
+.bird-spot-filter { display: flex; gap: 6px; margin: 10px 0; }
+.bird-spot-filter button { height: 30px; font-size: 12px; }
+.bird-spot-filter [aria-pressed="true"] { background: #eef8f3; color: var(--active); border-color: var(--active); }
+.bird-spot-scroll { flex: 1; min-height: 0; overflow: auto; }
+.bird-spot-observation { padding: 13px 18px; border-bottom: 1px solid #e5ece6; }
+.bird-spot-observation > div { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.bird-spot-observation a { color: var(--active); }
+.bird-spot-notes { padding: 16px 18px; font-size: 14px; }
+.bird-spot-notes p { font-size: 13px; color: var(--muted); line-height: 1.7; white-space: pre-wrap; }
+.bird-spot-notes textarea { display: block; width: 100%; min-height: 100px; border: 1px solid var(--border); border-radius: 7px; padding: 10px; font: inherit; margin-top: 10px; resize: vertical; }
+.bird-spot-marker { display: grid; place-items: center; background: var(--active); border: 3px solid white; border-radius: 50%; color: white; box-shadow: var(--shadow); font-size: 18px; }
+.bird-spot-map-caption { position: absolute; top: 12px; left: 55px; z-index: 600; background: var(--panel); padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; max-width: 320px; }
+.bird-spots-overlay { position: absolute; inset: 0; z-index: 1600; background: #17201855; display: grid; place-items: center; padding: 24px; }
+.bird-spots-dialog { width: min(580px, 100%); max-height: min(650px, 90%); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.bird-spots-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.bird-spots-dialog h2 { font-size: 20px; margin: 0; }
+.bird-spots-saved-list { overflow: auto; padding: 8px; }
+.bird-spots-saved-item { display: grid; gap: 4px; padding: 14px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: white; color: var(--fg); cursor: pointer; }
+.bird-spots-saved-item:hover { background: #eef8f3; }
+.bird-spot-error { padding: 16px 18px; color: var(--danger); font-size: 13px; }
+.bird-spot-toast, .bird-spot-action-error, .bird-spot-storage-error { position: absolute; z-index: 1800; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 16px; border-radius: 8px; background: var(--active); color: white; box-shadow: var(--shadow); font-size: 13px; display: flex; align-items: center; gap: 12px; max-width: min(640px, 90%); }
+.bird-spot-action-error { bottom: 80px; background: #fff4e6; color: var(--danger); border: 1px solid #ead5bb; }
+.bird-spot-storage-error { bottom: auto; top: 14px; background: #fff4e6; color: var(--danger); border: 1px solid #ead5bb; }
+.bird-spot-action-error .text-btn { color: var(--danger); border: 0; background: transparent; white-space: nowrap; }

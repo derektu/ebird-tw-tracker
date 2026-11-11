@@ -1,3 +1,4 @@
+import { confirmBirdSpotExit } from "../bird-spots/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Species } from "../../types/domain";
@@ -186,6 +187,7 @@ export function SearchToolbar() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!confirmBirdSpotExit()) return;
     const normalizedQuery = query.trim();
     const species = selectedSpecies &&
       (normalizedQuery === selectedSpecies.comName || normalizedQuery === selectedSpecies.speciesCode)

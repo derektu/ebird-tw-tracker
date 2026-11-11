@@ -1,4 +1,8 @@
 import L, { type Map as LeafletMap, type Marker } from "leaflet";
+import { createPortal } from "react-dom";
+import { useDesktopBirdSpots } from "../bird-spots/useDesktopBirdSpots";
+import { useBirdSpotMap } from "../bird-spots/useBirdSpotMap";
+import { BirdSpotPanel, BirdSpotMessages, SavedBirdSpots } from "../bird-spots/BirdSpotPanel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../../api/client";
 import type { Observation, ObservationEvent, Species } from "../../types/domain";
@@ -42,7 +46,7 @@ function createMarkerIcon(observation: Observation, active = false, discovery = 
   });
 }
 
-function createPopup(observation: Observation) {
+function createPopup(observation: Observation, actions: { view(): void; toggle(): void }) {
   const popup = document.createElement("div");
   popup.className = "popup";
 
@@ -80,6 +84,20 @@ function createPopup(observation: Observation) {
   mapsLine.append(maps);
   popup.append(mapsLine);
 
+  const birdSpotActions = document.createElement("div");
+  birdSpotActions.className = "bird-spot-popup-actions";
+  const view = document.createElement("button");
+  view.className = "primary"; view.type = "button"; view.textContent = "查看鳥點";
+  view.addEventListener("click", actions.view);
+  const save = document.createElement("button");
+  save.className = "secondary"; save.type = "button"; save.textContent = "☆ 收藏鳥點";
+  save.dataset.birdSpotSave = observation.locId || "";
+  save.addEventListener("click", actions.toggle);
+  birdSpotActions.append(view, save); popup.append(birdSpotActions);
+  if (!observation.locId) {
+    const hint = document.createElement("div");
+    hint.className = "bird-spot-legacy"; hint.textContent = "舊紀錄缺少鳥點 ID，請重新搜尋"; popup.append(hint);
+  }
   return {
     element: popup,
     showObserverLoading() {
@@ -132,6 +150,10 @@ function requestSpeciesSearch(species: Species, days: number, requestId: string)
 }
 
 export function MapWorkspace() {
+  const birdSpots = useDesktopBirdSpots();
+  const birdSpotsRef = useRef(birdSpots);
+  birdSpotsRef.current = birdSpots;
+  const resultListRef = useRef<HTMLDivElement>(null);
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const entriesRef = useRef<MapEntry[]>([]);
@@ -203,6 +225,7 @@ export function MapWorkspace() {
 
   useEffect(() => {
     const handleResults = (event: Event) => {
+      birdSpotsRef.current.resetForSearch();
       const result = (event as CustomEvent<SearchResult>).detail;
       const pending = pendingNotificationRef.current;
       const pendingRequestId = pendingNotificationRequestRef.current;
@@ -231,6 +254,7 @@ export function MapWorkspace() {
       const failure = (event as CustomEvent<SearchFailedEvent["error"]>).detail;
       if (failure.source !== "explicit" || failure.phase !== "species-resolution") return;
 
+      birdSpotsRef.current.resetForSearch();
       speciesRef.current = null;
       observationsRef.current = [];
       setSpecies(null);
@@ -244,6 +268,7 @@ export function MapWorkspace() {
       trackersRef.current = (event as CustomEvent<{ trackers: Tracker[] }>).detail.trackers;
     };
     const handleNotification = async (event: Event) => {
+      birdSpotsRef.current.resetForSearch();
       const selected = (event as CustomEvent<ObservationEvent>).detail;
       let pendingRequestId: string | null = null;
       try {
@@ -302,12 +327,20 @@ export function MapWorkspace() {
     const discoveryIds = new Set(visibleComparison?.discoveryIds ?? []);
     entriesRef.current = observations.map((observation, index) => {
       const discovery = discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId));
-      const popup = createPopup(observation);
+      const popup = createPopup(observation, {
+        view: () => birdSpotsRef.current.openObservation(observation, speciesRef.current),
+        toggle: () => void birdSpotsRef.current.toggleObservation(observation),
+      });
       const marker = L.marker([observation.lat, observation.lng], { icon: createMarkerIcon(observation, index === 0, discovery) })
         .addTo(map)
         .bindPopup(popup.element);
       marker.on("click", () => activate(index));
       marker.on("popupopen", () => {
+        const save = popup.element.querySelector<HTMLButtonElement>("[data-bird-spot-save]");
+        if (save) {
+          save.textContent = observation.locId && birdSpotsRef.current.saved(observation.locId) ? "★ 已收藏" : "☆ 收藏鳥點";
+          save.disabled = !birdSpotsRef.current.available || Boolean(observation.locId && birdSpotsRef.current.pending.has(observation.locId));
+        }
         popup.showObserverLoading();
         void loadObserverName(observation.subId)
           .then((name) => popup.showObserver(name))
@@ -336,6 +369,15 @@ export function MapWorkspace() {
     }
   }, [activate, comparison, comparisonScopeKey, loadObserverName, observations, species]);
 
+  const spotMap = useBirdSpotMap({ model: birdSpots, mapRef, entriesRef, listRef: resultListRef });
+  useEffect(() => {
+    mapNodeRef.current?.querySelectorAll<HTMLButtonElement>("[data-bird-spot-save]").forEach(button => {
+      const locId = button.dataset.birdSpotSave || "";
+      button.textContent = birdSpots.saved(locId) ? "★ 已收藏" : "☆ 收藏鳥點";
+      button.disabled = !birdSpots.available || birdSpots.pending.has(locId);
+    });
+  }, [birdSpots.collection, birdSpots.pending, birdSpots.available]);
+  const toolbarTarget = document.getElementById("bird-spots-root");
   const activeObservation = activeIndex >= 0 ? observations[activeIndex] : null;
   const birdCount = useMemo(
     () => observations.reduce((sum, observation) => sum + (observation.howMany ?? 0), 0),
@@ -353,6 +395,9 @@ export function MapWorkspace() {
 
   return (
     <main className="workspace">
+      {toolbarTarget && createPortal(<button className="secondary bird-spots-toolbar-button" onClick={birdSpots.showSaved}>☆ 我的鳥點{birdSpots.available ? ` ${birdSpots.spots.length}` : ""}</button>, toolbarTarget)}
+      <BirdSpotMessages model={birdSpots} />
+      <SavedBirdSpots model={birdSpots} />
       <section className="map-shell">
         <div ref={mapNodeRef} id="map" aria-label="鳥種觀察位置地圖" />
         <button
@@ -362,6 +407,7 @@ export function MapWorkspace() {
         >
           顯示全台
         </button>
+        {birdSpots.view.kind === "detail" && <div className="bird-spot-map-caption">此鳥點{!spotMap.hasCoordinates && "沒有可用座標；未建立位置標記"}</div>}
         {SHOW_SELECTED_CHECKLIST_CARD && (
           <section className="selected-card">
             <div>
@@ -395,7 +441,7 @@ export function MapWorkspace() {
       </section>
 
       {hasPublishedResult && (
-        <aside className="side">
+        <aside className="side" hidden={birdSpots.view.kind === "detail"} aria-label="鳥種搜尋結果">
           <section className="summary">
             <div className="metric result-count">
               <strong>{observations.length}</strong>
@@ -419,26 +465,28 @@ export function MapWorkspace() {
           {comparisonPresentation.warningText && (
             <div className="comparison warning" role="alert">{comparisonPresentation.warningText}</div>
           )}
-          <div className="list">
+          <div className="list" ref={resultListRef}>
             {observations.length ? observations.map((observation, index) => (
-              <button
+              <article
                 className={`item${activeIndex === index ? " active" : ""}`}
-                type="button"
                 key={`${observation.subId}-${observation.obsDt}-${index}`}
-                ref={(node) => { listItemsRef.current[index] = node; }}
-                onClick={() => activate(index, true)}
               >
+                <button className="item-select" type="button" ref={(node) => { listItemsRef.current[index] = node; }} onClick={() => activate(index, true)}>
                 <div className="item-title"><span>{observation.locName}</span><span>{observation.howMany ?? "?"}</span></div>
                 <div className="item-meta">{observation.obsDt} / {observation.subId}</div>
                 {discoveryIds.has(createChecklistIdentity(observation.speciesCode, observation.subId)) && <div className="tag discovery">新增</div>}
                 {observation.locationPrivate && <div className="tag">自訂地點</div>}
-              </button>
+                </button>
+                <div className="bird-spot-card-actions"><button className="primary" onClick={() => birdSpots.openObservation(observation, species)}>查看鳥點</button><button className="secondary" disabled={!birdSpots.available || Boolean(observation.locId && birdSpots.pending.has(observation.locId))} onClick={() => void birdSpots.toggleObservation(observation)}>{observation.locId && birdSpots.saved(observation.locId) ? "★ 已收藏" : "☆ 收藏鳥點"}</button></div>
+                {!observation.locId && <p className="bird-spot-legacy">舊紀錄缺少鳥點 ID，請重新搜尋。</p>}
+              </article>
             )) : (
               <div className="empty">這個條件沒有找到有座標的公開紀錄。</div>
             )}
           </div>
         </aside>
       )}
+      <BirdSpotPanel model={birdSpots} />
     </main>
   );
 }

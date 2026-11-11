@@ -1,3 +1,4 @@
+import { BirdSpotError, readBirdSpotQuery } from "../../src/domain/bird-spots.mjs";
 import { normalizeSpecies } from "../domain/species.mjs";
 import { createSearchScope } from "../../src/domain/search-discovery.mjs";
 
@@ -22,7 +23,7 @@ export function readBody(request) {
   });
 }
 
-export function createApiRouter({ settings, species, observations, tracking, searchSnapshots }) {
+export function createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots }) {
   return async function handleApi(request, response, url) {
     if (url.pathname === "/api/settings/api-key" && request.method === "GET") {
       jsonResponse(response, 200, await settings.status());
@@ -56,6 +57,17 @@ export function createApiRouter({ settings, species, observations, tracking, sea
         return;
       }
       jsonResponse(response, 200, { saved: await species.save(normalized) });
+      return;
+    }
+    if (url.pathname === "/api/bird-spots/observations") {
+      try {
+        if (request.method !== "GET") throw new BirdSpotError(405, "method_not_allowed", "此 API 僅接受 GET");
+        const { locId, days } = readBirdSpotQuery(url.searchParams);
+        jsonResponse(response, 200, await birdSpots.recent(locId, days));
+      } catch (error) {
+        if (!(error instanceof BirdSpotError)) throw error;
+        jsonResponse(response, error.statusCode, { code: error.code, error: error.message });
+      }
       return;
     }
     if (url.pathname === "/api/observations" && request.method === "GET") {

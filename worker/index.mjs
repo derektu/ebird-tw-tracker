@@ -1,5 +1,5 @@
 import { error, json } from "./responses.mjs";
-import { handleObservations, handleSpeciesResolve, handleSpeciesSearch } from "./routes.mjs";
+import { handleBirdSpotObservations, handleObservations, handleSpeciesResolve, handleSpeciesSearch } from "./routes.mjs";
 
 const validationPath = "/api/key/validate";
 const speciesSearchPath = "/api/species/search";
@@ -96,6 +96,8 @@ export function createSearchWorker({ fetch: upstreamFetch = fetch, assets, cache
         response = await handleSpeciesSearch(request, url, deps);
       } else if (url.pathname === speciesResolvePath) {
         response = await handleSpeciesResolve(request, url, deps);
+      } else if (url.pathname === "/api/bird-spots/observations") {
+        response = await handleBirdSpotObservations(request, url, deps);
       } else if (url.pathname === observationsPath) {
         response = await handleObservations(request, url, deps);
       } else if (url.pathname.startsWith("/api/")) {

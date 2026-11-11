@@ -1,3 +1,5 @@
+import { BirdSpotError, readBirdSpotQuery } from "../src/domain/bird-spots.mjs";
+import { fetchBirdSpotRecent } from "../server/services/bird-spot-service.mjs";
 import { resolveTaxonomyMatch, searchTaxonomy } from "../server/domain/species.mjs";
 import { mapObservations } from "../server/domain/observations.mjs";
 import { callEbird } from "./ebird.mjs";
@@ -107,4 +109,17 @@ export async function handleObservations(request, url, { upstreamFetch }) {
     generatedAt: new Date().toISOString(),
     observations: mapObservations(result.data),
   });
+}
+
+export async function handleBirdSpotObservations(request, url, { upstreamFetch }) {
+  try {
+    if (request.method !== "GET") throw new BirdSpotError(405, "method_not_allowed", "此 API 僅接受 GET");
+    const { locId, days } = readBirdSpotQuery(url.searchParams);
+    const { apiKey, error: keyError } = requireApiKey(request);
+    if (keyError) return keyError;
+    return json(200, await fetchBirdSpotRecent({ apiKey, locId, days, upstreamFetch }));
+  } catch (caught) {
+    if (!(caught instanceof BirdSpotError)) throw caught;
+    return error(caught.statusCode, caught.code, caught.message);
+  }
 }

@@ -130,6 +130,12 @@ npm run test:integration:required
 
 這個 variant 在沒有 `EBIRD_API_KEY` 時會失敗，避免把 skipped valid-path test 誤當成已驗證。CI 只執行一般 `npm run check`，不執行有網路與憑證依賴的 integration tests。
 
+## 鳥點 API
+
+Node 與 Search App Worker 提供 `GET /api/bird-spots/observations?locId=L11045618&days=14`，指定同一 eBird 地點查最近 1–30 天各鳥種的最新一筆。缺少名稱或座標仍保留紀錄；既有鳥種搜尋的座標篩選不變。資料格式、錯誤及真實查詢證據見 [鳥點 API 契約](docs/bird-spot-api-contract.md)。
+
+`npm run test:integration` 在 process 已提供 `EBIRD_API_KEY` 時，會動態選一個公共熱點及公開個人地點，驗證 1、14、30 天查詢；沒有 key 時明確 skip。`test:integration:required` 要求 key。兩種指令都不自動讀取 `.env`，以免意外在一般測試中使用個人憑證。
+
 ## Production web build
 
 ```bash

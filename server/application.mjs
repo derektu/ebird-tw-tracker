@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { createApiRouter, jsonResponse } from "./http/api-router.mjs";
 import { createEbirdClient, validateApiKey } from "./services/ebird-client.mjs";
+import { createBirdSpotService } from "./services/bird-spot-service.mjs";
 import { createObservationService } from "./services/observation-service.mjs";
 import { createSettingsService } from "./services/settings-service.mjs";
 import { createSpeciesService } from "./services/species-service.mjs";
@@ -33,6 +34,7 @@ export async function createApplication({
   onTrackingStateChange,
   searchSnapshotStore,
   viteHmr = true,
+  birdSpotFetch = fetch,
 } = {}) {
   const paths = {
     savedSpecies: path.join(dataDir, "saved-species.json"),
@@ -48,6 +50,7 @@ export async function createApplication({
   settings = createSettingsService({ root, settingsPath: paths.settings, settingsStore, env, validateApiKey });
   const ebird = createEbirdClient({ getApiKey: () => settings.requireApiKey() });
   const observations = createObservationService({ ebird });
+  const birdSpots = createBirdSpotService({ getApiKey: () => settings.requireApiKey(), upstreamFetch: birdSpotFetch });
   const species = createSpeciesService({
     ebird,
     savedSpeciesPath: paths.savedSpecies,
@@ -64,7 +67,7 @@ export async function createApplication({
     onStateChange: onTrackingStateChange,
   });
   const searchSnapshots = searchSnapshotStore ?? createSearchSnapshotStore({ filePath: paths.searchSnapshots });
-  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots });
+  const handleApi = createApiRouter({ settings, species, observations, tracking, searchSnapshots, birdSpots });
 
   let vite = null;
   if (!isProduction) {
@@ -137,5 +140,5 @@ export async function createApplication({
     await vite?.close();
   }
 
-  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots } };
+  return { listen, close, server, services: { settings, species, observations, tracking, searchSnapshots, birdSpots } };
 }

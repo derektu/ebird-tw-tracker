@@ -1,3 +1,5 @@
+import { normalizeLocationId } from "../../src/domain/bird-spots.mjs";
+
 /**
  * Reduce raw eBird recent-observation records to the fields the product
  * needs, keep only records with valid coordinates, and order them
@@ -7,6 +9,7 @@ export function mapObservations(items) {
   return items
     .filter((observation) => Number.isFinite(observation.lat) && Number.isFinite(observation.lng))
     .map((observation) => ({
+      locId: normalizeLocationId(observation.locId),
       speciesCode: observation.speciesCode,
       comName: observation.comName,
       sciName: observation.sciName,

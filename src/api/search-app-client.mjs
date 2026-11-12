@@ -56,3 +56,7 @@ export function fetchObservations({ speciesCode, days }, options) {
 export function fetchBirdSpotRecent({ locId, days }, options) {
   return requestJson(`/api/bird-spots/observations?locId=${encodeURIComponent(locId)}&days=${days}`, options);
 }
+
+export function fetchBirdSpotDirectory(options) {
+  return requestJson("/api/bird-spots/directory", options);
+}

@@ -217,7 +217,7 @@ test("obsolete detail responses and failures cannot replace a newer location or 
   await expect(results(page)).toBeVisible();
 });
 
-test("a failed note save retains its draft across back and reopening, and undo expires after eight seconds", async ({ page }) => {
+test("a failed note save retains its draft when continuing to edit, and undo expires after eight seconds", async ({ page }) => {
   await setup(page); await search(page); await open(page);
   await detail(page).getByRole("button", { name: "編輯筆記" }).click();
   const note = detail(page).getByRole("textbox", { name: "鳥點筆記" });
@@ -234,7 +234,7 @@ test("a failed note save retains its draft across back and reopening, and undo e
   await expect(page.getByRole("alert")).toContainText("無法讀寫");
   await expect(note).toHaveValue("保留這份未儲存的筆記");
   await detail(page).getByRole("button", { name: "返回搜尋結果" }).click();
-  await open(page);
+  await page.getByRole("dialog").getByRole("button", { name: "繼續編輯" }).click();
   await expect(note).toHaveValue("保留這份未儲存的筆記");
   await detail(page).getByRole("button", { name: "儲存筆記並收藏", exact: true }).click();
   await expect(detail(page).getByText("保留這份未儲存的筆記", { exact: true })).toBeVisible();

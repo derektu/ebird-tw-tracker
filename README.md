@@ -138,7 +138,7 @@ Node 與 Search App Worker 提供 `GET /api/bird-spots/observations?locId=L11045
 
 ## 鳥點收藏保存
 
-Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除。Desktop 已接入鳥點搜尋與收藏管理；Search App 可從鳥種紀錄收藏鳥點並查看 [鳥點詳情](docs/search-app-bird-spot-details.md)。
+Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除。Search App 在展開的搜尋條件提供鳥點名稱搜尋與「我的鳥點」，可查看近期鳥種、管理別名、筆記與釘選。操作方式見 [Search App 鳥點搜尋與收藏](docs/search-app-bird-spot-details.md)。
 
 資料規則、Node CRUD API、IndexedDB transaction 與驗證界線見 [鳥點收藏保存契約](docs/saved-bird-spot-storage.md)。
 

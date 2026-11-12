@@ -42,6 +42,7 @@ export function useBirdSpotNavigation(owner: string) {
     else intent.run();
   };
   const resolveLeave = async (choice: "save" | "discard" | "continue") => {
+    const leave = leaveRef.current;
     if (leave.kind !== "confirm") return;
     if (choice === "continue") {
       changeLeave({ kind: "idle" });
@@ -65,5 +66,5 @@ export function useBirdSpotNavigation(owner: string) {
     epoch.current++;
     changeLeave({ kind: "idle" });
   };
-  return { editor, leave, requestLeave, resolveLeave, cancelLeave };
+  return { editor, leave, requestLeave, resolveLeave, cancelLeave, hasPendingLeave: () => leaveRef.current.kind !== "idle" };
 }

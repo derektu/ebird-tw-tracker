@@ -23,3 +23,10 @@ export function fetchObservations(
 export type { Observation };
 
 export function fetchBirdSpotRecent(request: { locId: string; days: number }, options: SearchAppClientOptions): Promise<BirdSpotRecentResponse>;
+
+export interface BirdSpotDirectoryResponse {
+  status: "fresh" | "stale" | "unavailable";
+  spots: import("../domain/bird-spot-directory.mjs").BirdSpotDirectoryItem[];
+  updatedAt: string | null;
+}
+export function fetchBirdSpotDirectory(options: SearchAppClientOptions): Promise<BirdSpotDirectoryResponse>;

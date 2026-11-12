@@ -1,4 +1,4 @@
-import { createSavedBirdSpotStore, parseSavedBirdSpotDocument, SavedBirdSpotError, storageError } from "../../domain/saved-bird-spots.mjs";
+import { createSavedBirdSpotStore, mutateSavedBirdSpots, parseSavedBirdSpotDocument, SavedBirdSpotError, storageError } from "../../domain/saved-bird-spots.mjs";
 
 const storeName = "saved-bird-spots";
 function openDatabase(indexedDB, databaseName) {
@@ -17,8 +17,8 @@ function openDatabase(indexedDB, databaseName) {
     };
   });
 }
-export function createIndexedDbSavedBirdSpotStore({ indexedDB = globalThis.indexedDB, databaseName = "ebird-saved-bird-spots", now } = {}) {
-  return createSavedBirdSpotStore(async (operation, writable = true) => {
+export function createIndexedDbSavedBirdSpotStore({ indexedDB = globalThis.indexedDB, databaseName = "ebird-saved-bird-spots", now = () => new Date().toISOString() } = {}) {
+  async function transact(operation, writable = true) {
     const database = await openDatabase(indexedDB, databaseName);
     try {
       return await new Promise((resolve, reject) => {
@@ -44,5 +44,13 @@ export function createIndexedDbSavedBirdSpotStore({ indexedDB = globalThis.index
         } catch { reject(storageError()); }
       });
     } finally { database.close(); }
-  }, now);
+  }
+  return {
+    ...createSavedBirdSpotStore(transact, now),
+    saveNote: (spot, note) => transact(spots => {
+      const date = now();
+      const saved = mutateSavedBirdSpots(spots, { kind: "save", spot }, date);
+      return mutateSavedBirdSpots(saved.spots, { kind: "update", locId: spot.locId, changes: { note } }, date);
+    }),
+  };
 }

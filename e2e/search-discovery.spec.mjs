@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test.mjs";
 
 const apiKey = "browser-owned-key";
 const species = { speciesCode: "grpsni1", comName: "彩鷸", sciName: "Rostratula benghalensis" };
@@ -210,29 +210,31 @@ test("a stale browser search cannot replace the latest Search App result or base
   await expect(page.getByText("基準地點")).toHaveCount(0);
   await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
 });
-test("Search App distinguishes muted no discoveries from visible comparison warnings", async ({ browser }) => {
-  const cases = [
-    {
-      failureAt: undefined,
-      compactText: "沒有新增",
-      responses: [observations([firstObservation]), observations([firstObservation])],
-    },
-    {
-      failureAt: 4,
-      compactText: "新增 1 筆",
-      warningText: "比較基準未更新；下次可能重複顯示新增紀錄。",
-      responses: [observations([firstObservation]), observations([discoveryObservation, firstObservation])],
-    },
-    {
-      failureAt: 1,
-      warningText: "無法使用搜尋比較；已顯示一般搜尋結果。",
-      responses: [observations([firstObservation])],
-    },
-  ];
 
-  for (const scenario of cases) {
-    const context = await browser.newContext();
-    const page = await context.newPage();
+const comparisonWarningCases = [
+  {
+    name: "muted no discoveries",
+    failureAt: undefined,
+    compactText: "沒有新增",
+    responses: [observations([firstObservation]), observations([firstObservation])],
+  },
+  {
+    name: "baseline write warning",
+    failureAt: 4,
+    compactText: "新增 1 筆",
+    warningText: "比較基準未更新；下次可能重複顯示新增紀錄。",
+    responses: [observations([firstObservation]), observations([discoveryObservation, firstObservation])],
+  },
+  {
+    name: "comparison unavailable warning",
+    failureAt: 1,
+    warningText: "無法使用搜尋比較；已顯示一般搜尋結果。",
+    responses: [observations([firstObservation])],
+  },
+];
+
+for (const scenario of comparisonWarningCases) {
+  test(`Search App displays ${scenario.name}`, async ({ page }) => {
     if (scenario.failureAt) await failIndexedDbOpen(page, scenario.failureAt);
     await signIn(page);
     await stubSearches(page, scenario.responses);
@@ -248,9 +250,8 @@ test("Search App distinguishes muted no discoveries from visible comparison warn
     }
     if (scenario.failureAt === 4) await expect(page.getByText("新增", { exact: true })).toBeVisible();
     if (scenario.failureAt === 1) await expect(page.getByText("新增", { exact: true })).toHaveCount(0);
-    await context.close();
-  }
-});
+  });
+}
 
 test("compact mobile controls retain the zero-coordinate result explanation", async ({ page }) => {
   await page.setViewportSize({ width: 483, height: 852 });

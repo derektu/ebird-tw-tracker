@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test.mjs";
 
 const species = { speciesCode: "grpsni1", comName: "彩鷸", sciName: "Rostratula benghalensis" };
 const source = { ...species, locId: "L123", locName: "宜蘭雙連埤", lat: 24.6, lng: 121.7, obsDt: "2026-11-11 07:30", subId: "S123", howMany: 4, locationPrivate: false, obsValid: true, obsReviewed: false };

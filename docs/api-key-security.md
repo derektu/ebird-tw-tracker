@@ -16,7 +16,13 @@ Search App 使用 browser-owned eBird API key。這個選擇由 [ADR 0003](./adr
 
 Worker 採 fail-closed route allowlist，固定 upstream hostname、pathname 與 query shape；使用者不能讓它轉送任意 URL。taxonomy edge cache 使用固定、不含 key 的 cache key；observation API response 使用 `Cache-Control: no-store`。Worker error 只回傳裁切過的產品錯誤，不回傳 upstream body、request headers 或 stack trace。
 
-所有 Worker 和 static-asset response 都帶有 restrictive Content Security Policy：script 只允許 self-hosted assets、API connection 只允許同源、圖片只允許 self、`data:` 和 OpenStreetMap tile host，並禁止 frame embedding 與第三方 analytics/runtime script。Leaflet 需要 DOM inline positioning styles，因此 `style-src` 例外允許 `'unsafe-inline'`；它不允許第三方 stylesheet host。其他 headers 包含 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: no-referrer` 和禁止 camera、geolocation、microphone 的 Permissions Policy。
+所有 Worker 和 static-asset response 都帶有 restrictive Content Security Policy：script 只允許 self-hosted assets、API connection 只允許同源、圖片只允許 self、`data:` 和 `https://tile.openstreetmap.org`，並禁止 frame embedding 與第三方 analytics/runtime script。Leaflet 需要 DOM inline positioning styles，因此 `style-src` 例外允許 `'unsafe-inline'`；它不允許第三方 stylesheet host。其他 headers 包含 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: strict-origin-when-cross-origin` 和禁止 camera、geolocation、microphone 的 Permissions Policy。
+
+## 地圖圖磚與來源資訊
+
+兩版地圖使用 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`。OpenStreetMap 是獨立底圖服務，不需要另一把 eBird API key。[OSM 圖磚政策](https://operations.osmfoundation.org/policies/tiles/)要求網頁送出有效的 `Referer`；`no-referrer` 會移除這個 header，可能導致 403 Access blocked。Worker 使用 `strict-origin-when-cross-origin`，讓瀏覽器對外部圖磚只送出網站 origin，不含頁面路徑、query 或 API key。外連仍保留 `rel="noreferrer"`。
+
+Search App 和 Desktop web 的 Playwright 測試共用 `e2e/fixtures/test.mjs`，在瀏覽器 context 先攔截 canonical 與舊子網域圖磚 URL，回傳本機 PNG，不下載公共 OSM 圖磚。來源資訊回歸測試使用實際 Worker HTML headers 和瀏覽器產生的請求，驗證 canonical host、origin-only `Referer` 與 key 未外洩。這不證明 OSM 已解除服務端封鎖；實際底圖仍待人工瀏覽確認。
 
 ## 使用與處理規則
 

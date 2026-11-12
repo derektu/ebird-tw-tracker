@@ -63,6 +63,9 @@ async function signInAndSearch(page, observationResponse = observations) {
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
+  await expect(page.locator(".search-workspace")).toBeVisible();
+  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
+  if (await expandInitial.isVisible()) await expandInitial.click();
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
   await page.getByRole("button", { name: "搜尋" }).click();
 }
@@ -80,7 +83,7 @@ test("mobile Bottom Sheet preserves the full selected result collection through 
   await expect(markers).toHaveCount(2);
   await expect(page.getByPlaceholder("輸入中文名、英文名或 species code")).toHaveCSS("font-size", "16px");
   await expect(items.nth(0)).toHaveClass(/active/);
-  await expect(items.nth(0).getByText("宜蘭雙連埤")).toBeVisible();
+  await expect(items.nth(0).getByRole("button", { name: "查看鳥點 宜蘭雙連埤" })).toBeVisible();
   await expect(items.nth(0).getByRole("link", { name: "開啟 Checklist" })).toHaveAttribute(
     "href",
     "https://ebird.org/checklist/S379420319",
@@ -98,7 +101,7 @@ test("mobile Bottom Sheet preserves the full selected result collection through 
   await page.getByRole("button", { name: "縮小結果清單" }).click();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
 
-  await items.nth(1).getByRole("button").click();
+  await items.nth(1).locator(".observation-select").click();
   await expect(items.nth(1)).toHaveClass(/active/);
   await expect(markers.nth(1)).toHaveClass(/active/);
 
@@ -223,6 +226,9 @@ test("mobile search controls compact after success, preserve state while editing
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
+  await expect(page.locator(".search-workspace")).toBeVisible();
+  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
+  if (await expandInitial.isVisible()) await expandInitial.click();
 
   const field = page.getByPlaceholder("輸入中文名、英文名或 species code");
   await expect(field).toBeVisible();
@@ -317,6 +323,9 @@ test("mobile form collapses without publishing a Sheet and preserves a published
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
+  await expect(page.locator(".search-workspace")).toBeVisible();
+  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
+  if (await expandInitial.isVisible()) await expandInitial.click();
   await expect(page.getByRole("complementary", { name: "搜尋結果" })).toHaveCount(0);
 
   const collapse = page.getByRole("button", { name: "收合條件" });

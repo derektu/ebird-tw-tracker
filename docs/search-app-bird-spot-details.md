@@ -1,0 +1,35 @@
+# Search App 鳥點詳情
+
+Search App 從選取的鳥種觀察紀錄提供鳥點詳情與收藏。點地名旁的 › 開啟詳情，同列星號收藏或取消收藏。Checklist 與 Google Maps 保留為紀錄卡的主要外部操作。
+
+## 詳情與返回
+
+手機未搜尋時只有收合搜尋卡與地圖，不開結果清單。鳥點沿用結果 bottom sheet，預設半屏，可展開、完全收合、從地圖標記或「重開鳥點詳情」返回半屏。第一列包含返回、地名、星號、展開與收合，筆記和 Maps 位於鳥種列下方。
+
+詳情預設明確查詢最近 3 天，允許 1–30 天。從鳥種紀錄進入時可切換全部鳥種或原鳥種。各鳥種顯示期間內最新一筆，鳥名連到 eBird species 頁，Checklist 連結保持獨立。空結果與查詢失敗分開顯示；沒有近期紀錄仍可保存收藏與筆記。缺少座標時不建立假標記，也不提供 Maps 連結。
+
+`SearchWorkspace` 保存進入詳情前的地圖中心與縮放、選取、清單捲動及 sheet 狀態。返回恢復這些值，不重新執行鳥種搜尋，也不更新 Search Baseline。新的明確鳥種搜尋取消詳情請求並清除返回位置。詳情請求同時使用 AbortSignal 與 generation，舊回應與舊錯誤不能覆蓋新的畫面。
+
+## 保存與憑證
+
+`useSearchBirdSpots` 使用穩定的 browser IndexedDB store 與可注入的 recent query。它不使用 Desktop store 或 Tracker。星號在 IndexedDB 寫入成功後才改變，同一地點的重複操作在寫入期間停用。讀取收藏失敗會明確顯示錯誤與重試，不當作空收藏。
+
+筆記寫入失敗保留輸入，可再次儲存。返回再開同一鳥點也保留該頁面的未儲存草稿；重新整理前需先儲存。取消收藏提供 8 秒復原，復原保留原筆記與 metadata；同 ID 已存在時以 store 的現存紀錄為準。
+
+API key 只在同源請求的 header 傳遞。SearchApp 保有忘記 key 的責任，入口位於展開的搜尋條件，避免覆蓋 sheet 操作。忘記 key 不清除 IndexedDB 收藏或 Search Baseline。
+
+## 瀏覽器驗證
+
+`npx playwright test e2e/search-bird-spot-detail.spec.mjs` 使用 headless Chromium、隔離的 browser context、實際 IndexedDB 與受控 API fixtures。涵蓋 320、390、402、1440px、70px 手機收合卡、44px 主要控制、半屏多筆鳥種、篩選與連結、sheet 狀態、返回選取與捲動、地圖標記位置、Search Baseline、讀寫失敗與重試、筆記草稿、取消收藏復原、忘記 key 與過時請求。
+
+測試將 390px 與 1440px 的執行畫面保存於 `test-results/`，檔名以 `headless-fixture-detail-` 開頭。這些是執行中 app 的 headless browser 截圖，資料為 fixtures，底圖需網路。它們不是實際手機、iOS 軟體鍵盤或 safe area 的驗收證據。完整檢查為 `npm run check:all`，真實 eBird 查詢另在 integration workflow 執行。
+
+## 真實上游的 headless 驗證
+
+2026-11-12 另以隱藏 Chromium 連接本機 Worker，安全注入 key，未攔截或替換 API 回應。從彩鷸的 6 筆搜尋紀錄進入公共鳥點 `L8033326`，明確以 `days=3` 查詢並取得 34 個鳥種；收藏成功與返回原結果通過。這是當次 eBird 回應，之後筆數可能不同。key 只出現在請求 header，沒有進入 URL、收藏內容或截圖。
+
+下圖是這次真實上游的 headless 執行畫面。手機尺寸代表 Chromium viewport，並非實際手機的鍵盤或 safe area 驗證。所有本票測試都使用 headless browser，沒有啟動 Electron 或切換使用者焦點。
+
+![390px 半屏鳥點詳情與短暫收藏提示](screenshots/search-app-bird-spot-live-390.png)
+
+![1440px 鳥點詳情](screenshots/search-app-bird-spot-live-1440.png)

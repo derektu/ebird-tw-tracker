@@ -31,6 +31,9 @@ async function signIn(page) {
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
+  await expect(page.locator(".search-workspace")).toBeVisible();
+  const expand = page.getByRole("button", { name: "展開搜尋條件" });
+  if (await expand.isVisible()) await expand.click();
   await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
 }
 
@@ -60,8 +63,8 @@ async function failIndexedDbOpen(page, callNumber) {
       configurable: true,
       value: {
         open(...args) {
-          calls += 1;
-          if (calls === failAt) throw new DOMException("storage unavailable", "InvalidStateError");
+          if (args[0] === "ebird-search-snapshots") calls += 1;
+          if (args[0] === "ebird-search-snapshots" && calls === failAt) throw new DOMException("storage unavailable", "InvalidStateError");
           return browserIndexedDb.open(...args);
         },
       },

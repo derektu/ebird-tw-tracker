@@ -128,6 +128,30 @@ for (const width of [320, 390, 402]) {
   });
 }
 
+test("a pending response preserves an empty days draft and another location starts at three", async ({ page }) => {
+  let held;
+  await setup(page, { recentHandler: route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get("days") === "7") { held = route; return; }
+    return route.fulfill({ json: recent(params.get("locId")) });
+  } });
+  await search(page); await open(page);
+  const snapshot = await baseline(page);
+  const days = detail(page).getByRole("spinbutton", { name: "鳥點最近天數" });
+  await days.fill("7");
+  await expect.poll(() => Boolean(held)).toBe(true);
+  await days.press("ControlOrMeta+A"); await days.press("Backspace");
+  await expect(days).toHaveValue("");
+  await held.fulfill({ json: { ...recent(), days: 7 } });
+  await expect(detail(page).locator(".search-spot-row")).toHaveCount(8);
+  await expect(days).toHaveValue("");
+  await detail(page).getByRole("button", { name: "返回搜尋結果" }).click();
+  await page.locator(".observation-card").nth(1).locator(".observation-select").click();
+  await page.getByRole("button", { name: `查看鳥點 ${observations[1].locName}`, exact: true }).click();
+  await expect(detail(page).getByRole("spinbutton", { name: "鳥點最近天數" })).toHaveValue("3");
+  expect(await baseline(page)).toEqual(snapshot);
+});
+
 for (const width of [320, 390, 402, 1440]) {
   test(`bird-spot detail preserves the compact search layout and accessible controls at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 844 });
@@ -275,7 +299,10 @@ test("empty, unavailable and network failures stay distinct and days are bounded
   await expect(detail(page).locator(".search-spot-row")).toHaveCount(8);
   expect(requests).toEqual(["3", "30", "30", "30"]);
   await detail(page).getByRole("spinbutton", { name: "鳥點最近天數" }).fill("31");
-  await expect(detail(page).getByRole("spinbutton", { name: "鳥點最近天數" })).toHaveValue("30");
+  await expect(detail(page).getByRole("spinbutton", { name: "鳥點最近天數" })).toHaveValue("31");
+  await detail(page).getByRole("button", { name: "更新", exact: true }).click();
+  expect(await detail(page).getByRole("spinbutton", { name: "鳥點最近天數" }).evaluate(node => node.validity.rangeOverflow)).toBe(true);
+  expect(requests).toEqual(["3", "30", "30", "30"]);
 });
 
 test("obsolete detail responses and failures cannot replace a newer location or explicit search", async ({ page }) => {

@@ -322,6 +322,38 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     return () => { detailMarkerRef.current?.remove(); detailMarkerRef.current = null; };
   }, [birdSpots.view.kind, showingDetail, detailLat, detailLng, observations]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const heading = detailHeadingRef.current;
+    if (!map || !showingDetail || !heading || detailLat == null || detailLng == null) return;
+    const container = map.getContainer();
+    const sheet = heading.closest("aside");
+    let frame = 0;
+    const positionMarker = () => {
+      if (!window.matchMedia("(max-width: 720px)").matches) return;
+      map.invalidateSize({ animate: false, pan: false });
+      const bounds = container.getBoundingClientRect();
+      const visibleHeight = sheetState === "collapsed" || !sheet ? bounds.height : Math.min(bounds.height, sheet.getBoundingClientRect().top - bounds.top);
+      if (visibleHeight < 64) return;
+      const marker = map.latLngToContainerPoint([detailLat, detailLng]);
+      map.panBy([marker.x - bounds.width / 2, marker.y - visibleHeight / 2], { animate: false });
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(positionMarker);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(container);
+    if (sheet) observer.observe(sheet);
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [showingDetail, detailLat, detailLng, sheetState, controlsExpanded, detailHeadingRef]);
+
   const chooseSpecies = useCallback((chosen: Species) => {
     setSelectedSpecies(chosen);
     setQuery(chosen.comName);

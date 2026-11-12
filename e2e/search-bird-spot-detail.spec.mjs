@@ -312,7 +312,7 @@ test("saving notes and undoing removal preserve metadata committed by another ta
   expect((await favorites(page))[0].spots[0]).toMatchObject({ alias: "另一分頁的別名", pinned: true, note: "移除前另一分頁的新筆記" });
 });
 
-test('bird spot marker stays above the half sheet after search controls and map size change', async ({ page }) => {
+test('bird spot marker stays above the half sheet after search controls and map size change', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 700 });
   await setup(page); await search(page); await open(page);
   const visibleMarker = () => page.evaluate(() => {
@@ -322,6 +322,7 @@ test('bird spot marker stays above the half sheet after search controls and map 
     return marker.top >= map.top + 8 && marker.bottom <= sheet.top - 8;
   });
   await expect.poll(visibleMarker).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('marker-above-half-sheet.png') });
   await page.getByRole('button', { name: '修改搜尋', exact: true }).click();
   await expect.poll(visibleMarker).toBe(true);
   await page.getByRole('button', { name: '收合條件', exact: true }).click();

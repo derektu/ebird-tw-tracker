@@ -397,7 +397,7 @@ for (const width of [320, 390, 402]) {
   });
 }
 
-test('focused editor fields stay inside the scrolling area after keyboard resize and viewport pan', async ({ page }) => {
+test('focused editor fields stay inside the scrolling area after keyboard resize and viewport pan', async ({ page }, testInfo) => {
   await setup(page);
   await openManager(page);
   await button(manager(page), '編輯 地點 02').click();
@@ -420,6 +420,7 @@ test('focused editor fields stay inside the scrolling area after keyboard resize
   await fit(310, 180);
   await expect.poll(() => visible(field(page, '筆記'))).toBe(true);
   await field(page, '筆記').fill('鍵盤抬起後仍能輸入');
+  await page.screenshot({ path: testInfo.outputPath('keyboard-viewport-field-visible.png'), clip: { x: 0, y: 180, width: 390, height: 310 } });
   await fit(844, 0);
   await expect.poll(() => visible(field(page, '筆記'))).toBe(true);
   await button(manager(page), '儲存').click();

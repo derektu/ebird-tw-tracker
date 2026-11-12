@@ -53,16 +53,33 @@ export function SearchSpotManager({ model, editor, view, hidden, onClose, onRece
     const viewport = window.visualViewport;
     const workspace = region.current?.parentElement;
     if (!viewport || !workspace || hidden) return;
+    let frame = 0;
+    const revealField = () => {
+      const fields = fieldsNode.current;
+      const focused = document.activeElement;
+      if (!fields || !(focused instanceof HTMLElement) || !fields.contains(focused)) return;
+      const area = fields.getBoundingClientRect();
+      const field = focused.getBoundingClientRect();
+      if (field.bottom > area.bottom) fields.scrollTop += field.bottom - area.bottom + 8;
+      if (field.top < area.top) fields.scrollTop -= area.top - field.top + 8;
+    };
     const fitViewport = () => {
       workspace.style.setProperty("--spot-viewport-height", viewport.height + "px");
+      workspace.toggleAttribute("data-compact-viewport", viewport.height < 480);
       workspace.style.setProperty("--spot-viewport-top", viewport.offsetTop + "px");
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(revealField);
     };
     fitViewport();
     viewport.addEventListener("resize", fitViewport);
     viewport.addEventListener("scroll", fitViewport);
+    workspace.addEventListener("focusin", fitViewport);
     return () => {
       viewport.removeEventListener("resize", fitViewport);
       viewport.removeEventListener("scroll", fitViewport);
+      workspace.removeEventListener("focusin", fitViewport);
+      cancelAnimationFrame(frame);
+      workspace.removeAttribute("data-compact-viewport");
       workspace.style.removeProperty("--spot-viewport-height");
       workspace.style.removeProperty("--spot-viewport-top");
     };

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test.mjs";
 
 const iconPaths = [
   "/icons/search-apple-touch-icon.png",

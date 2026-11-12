@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test.mjs";
 
 const now = "2026-11-11T00:00:00.000Z";
 const directory = Array.from({ length: 30 }, (_, i) => ({

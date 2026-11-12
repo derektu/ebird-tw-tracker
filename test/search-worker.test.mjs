@@ -134,11 +134,11 @@ test("Worker responses apply a restrictive same-origin CSP and security headers 
     assert.match(csp, /script-src 'self'/);
     assert.match(csp, /style-src 'self' 'unsafe-inline'/);
     assert.match(csp, /connect-src 'self'/);
-    assert.match(csp, /img-src 'self' data: https:\/\/\*\.tile\.openstreetmap\.org/);
+    assert.equal(csp.split("; ").find(directive => directive.startsWith("img-src ")), "img-src 'self' data: https://tile.openstreetmap.org");
     assert.match(csp, /frame-ancestors 'none'/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.get("x-frame-options"), "DENY");
-    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
     assert.ok(![...response.headers.entries()].some(([name, value]) => name.includes("key") || value.includes(apiKey)));
   }
 });

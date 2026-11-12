@@ -12,6 +12,9 @@ import { createIndexedDbSearchSnapshotStore } from "./browser-search-snapshot-st
 import { createSearchWorkflow } from "../../features/search/search-workflow.mjs";
 import { readRecentSpecies, recordRecentSpecies } from "./recent-species-store.mjs";
 
+import { useSearchBirdSpots } from "./useSearchBirdSpots";
+import { SearchBirdSpotDetail, SearchBirdSpotMessages, type SheetState } from "./SearchBirdSpotDetail";
+
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
 
@@ -72,7 +75,9 @@ function createPopup(observation: Observation) {
   return popup;
 }
 
-export function SearchWorkspace() {
+export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
+  const birdSpots = useSearchBirdSpots();
+  const showingDetail = birdSpots.view.kind === "detail";
 
   const [query, setQuery] = useState("");
   const [days, setDays] = useState(3);
@@ -86,8 +91,8 @@ export function SearchWorkspace() {
   const [comparison, setComparison] = useState<SearchComparison | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
-  const [sheetState, setSheetState] = useState<"half" | "expanded" | "collapsed">("half");
-  const [controlsExpanded, setControlsExpanded] = useState(true);
+  const [sheetState, setSheetState] = useState<SheetState>("half");
+  const [controlsExpanded, setControlsExpanded] = useState(() => !window.matchMedia("(max-width: 720px)").matches);
   const [publishedDays, setPublishedDays] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
@@ -100,6 +105,41 @@ export function SearchWorkspace() {
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const compactSearchRef = useRef<HTMLButtonElement>(null);
+
+  const resultListRef = useRef<HTMLUListElement>(null);
+  const resultsSideRef = useRef<HTMLElement>(null);
+  const detailHeadingRef = useRef<HTMLButtonElement>(null);
+  const detailMarkerRef = useRef<Marker | null>(null);
+  const returnSnapshot = useRef<{ center: L.LatLng; zoom: number; sheet: SheetState; listScroll: number; sideScroll: number; focus: HTMLElement | null } | null>(null);
+  const restoringResults = useRef(false);
+  const openSpot = (observation: Observation) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const snapshot = { center: map.getCenter(), zoom: map.getZoom(), sheet: sheetState,
+      listScroll: resultListRef.current?.scrollTop ?? 0, sideScroll: resultsSideRef.current?.scrollTop ?? 0,
+      focus: document.activeElement instanceof HTMLElement ? document.activeElement : null };
+    if (!birdSpots.openObservation(observation, species)) return;
+    returnSnapshot.current = snapshot;
+    setSheetState("half");
+    window.requestAnimationFrame(() => detailHeadingRef.current?.focus({ preventScroll: true }));
+  };
+  const backFromSpot = () => {
+    const snapshot = returnSnapshot.current;
+    restoringResults.current = true;
+    birdSpots.close();
+    if (snapshot) {
+      setSheetState(snapshot.sheet);
+      window.requestAnimationFrame(() => {
+        mapRef.current?.invalidateSize();
+        mapRef.current?.setView(snapshot.center, snapshot.zoom, { animate: false });
+        if (resultListRef.current) resultListRef.current.scrollTop = snapshot.listScroll;
+        if (resultsSideRef.current) resultsSideRef.current.scrollTop = snapshot.sideScroll;
+        snapshot.focus?.focus({ preventScroll: true });
+        restoringResults.current = false;
+      });
+    }
+    returnSnapshot.current = null;
+  };
 
   if (!workflowRef.current) {
     const runtime = createSearchAppRuntime({
@@ -157,6 +197,12 @@ export function SearchWorkspace() {
     });
   }
   const workflow = workflowRef.current;
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 720px)");
+    const resize = () => { if (!mobile.matches) setSheetState("half"); };
+    mobile.addEventListener("change", resize);
+    return () => mobile.removeEventListener("change", resize);
+  }, []);
   const discoveryIds = useMemo(() => new Set(comparison?.discoveryIds ?? []), [comparison]);
 
   useEffect(() => {
@@ -234,12 +280,12 @@ export function SearchWorkspace() {
   }, [sheetState]);
 
   useEffect(() => {
-    if (sheetState === "collapsed" || activeIndex < 0) return;
+    if (showingDetail || restoringResults.current || sheetState === "collapsed" || activeIndex < 0) return;
     const item = listItemsRef.current[activeIndex];
     if (!item) return;
     const frame = window.requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
     return () => window.cancelAnimationFrame(frame);
-  }, [activeIndex, sheetState]);
+  }, [activeIndex, sheetState, showingDetail]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -269,6 +315,24 @@ export function SearchWorkspace() {
     return () => document.removeEventListener("click", close);
   }, [suggestions.length, showRecent]);
 
+  const detailSpot = birdSpots.detailSpot;
+  const detailLat = detailSpot?.lat, detailLng = detailSpot?.lng;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    entriesRef.current.forEach(({ marker }) => { if (showingDetail) marker.remove(); else marker.addTo(map); });
+    map.closePopup();
+    if (showingDetail && detailLat != null && detailLng != null) {
+      const element = document.createElement("div"); element.className = "bird-marker active"; element.textContent = "●";
+      const marker = L.marker([detailLat, detailLng], { icon: L.divIcon({ className: "", html: element, iconSize: [34, 34], iconAnchor: [17, 17] }), title: "開啟鳥點詳情" }).addTo(map);
+      marker.on("click", () => { setSheetState("half"); window.requestAnimationFrame(() => detailHeadingRef.current?.focus({ preventScroll: true })); });
+      marker.getElement()?.setAttribute("aria-label", "開啟鳥點詳情");
+      detailMarkerRef.current = marker;
+      map.setView([detailLat, detailLng], 13, { animate: false });
+    }
+    return () => { detailMarkerRef.current?.remove(); detailMarkerRef.current = null; };
+  }, [showingDetail, detailLat, detailLng, observations]);
+
   const chooseSpecies = useCallback((chosen: Species) => {
     setSelectedSpecies(chosen);
     setQuery(chosen.comName);
@@ -289,9 +353,11 @@ export function SearchWorkspace() {
         setErrorMessage("請輸入鳥種名稱、英文名或 species code");
         return;
       }
+      birdSpots.close();
+      returnSnapshot.current = null;
       void workflow.run({ source: "explicit", species, query: species ? undefined : normalizedQuery, days });
     },
-    [days, query, selectedSpecies, workflow],
+    [days, query, selectedSpecies, workflow, birdSpots.close],
   );
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
 
@@ -396,6 +462,7 @@ export function SearchWorkspace() {
             {busy ? "搜尋中…" : "搜尋"}
           </button>
         </form>
+        <button className="search-app-secondary workspace-forget-key" type="button" onClick={onForgetKey}>忘記 API key</button>
         {errorMessage && <p className="api-key-error" role="alert">{errorMessage}</p>}
         {species && (
           <p className="search-results-summary">
@@ -410,14 +477,15 @@ export function SearchWorkspace() {
         {comparisonPresentation.assistiveStatus && (
           <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
         )}
-        {comparisonPresentation.warningText && (
-          <p className="search-comparison warning" role="alert">{comparisonPresentation.warningText}</p>
-        )}
         {searched && observations.length === 0 && (
           <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>
         )}
       </section>
 
+        {comparisonPresentation.warningText && (
+          <p className="search-comparison warning" role="alert">{comparisonPresentation.warningText}</p>
+        )}
+      <SearchBirdSpotMessages model={birdSpots} />
       <section className="workspace" aria-label="觀察紀錄地圖與列表">
         <div className="map-shell">
           <div ref={mapNodeRef} id="map" aria-label="鳥種觀察位置地圖" />
@@ -428,23 +496,23 @@ export function SearchWorkspace() {
           >
             顯示全台
           </button>
-          {observations.length > 0 && sheetState === "collapsed" && (
+          {(observations.length > 0 || showingDetail) && sheetState === "collapsed" && (
             <button
               className="reopen-results-button"
               type="button"
               ref={reopenResultsRef}
-              aria-label={`顯示 ${observations.length} 筆結果${comparisonPresentation.compactText ? `，${comparisonPresentation.compactText}` : ""}`}
+              aria-label={showingDetail ? "重開鳥點詳情" : `顯示 ${observations.length} 筆結果${comparisonPresentation.compactText ? `，${comparisonPresentation.compactText}` : ""}`}
               onClick={() => {
                 setSheetState("half");
-                window.requestAnimationFrame(() => sheetHandleRef.current?.focus());
+                window.requestAnimationFrame(() => (showingDetail ? detailHeadingRef.current : sheetHandleRef.current)?.focus());
               }}
             >
-              顯示 {observations.length} 筆結果
+              {showingDetail ? "重開鳥點詳情" : `顯示 ${observations.length} 筆結果`}
             </button>
           )}
         </div>
         {observations.length > 0 && (
-        <aside className="side" data-sheet-state={sheetState} aria-label="搜尋結果">
+        <aside ref={resultsSideRef} className="side" hidden={showingDetail} data-sheet-state={sheetState} aria-label="搜尋結果">
           <div className="bottom-sheet-controls">
             <span className="bottom-sheet-result-summary">
               {observations.length} 筆結果
@@ -475,7 +543,7 @@ export function SearchWorkspace() {
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <ul className="observation-list">
+          <ul className="observation-list" ref={resultListRef}>
             {observations.map((observation, index) => {
               const selected = activeIndex === index;
               return (
@@ -484,14 +552,19 @@ export function SearchWorkspace() {
                   key={`${observation.subId}-${observation.obsDt}`}
                   ref={(node) => { listItemsRef.current[index] = node; }}
                 >
+                  {selected && <div className="observation-location-row">
+                    <button className="observation-spot-name" aria-label={`查看鳥點 ${observation.locName}`} onClick={() => openSpot(observation)}>{observation.locName} <span aria-hidden="true">›</span></button>
+                    <button className="spot-icon-button" aria-label={`${birdSpots.saved(observation.locId ?? "") ? "取消收藏" : "收藏"} ${observation.locName}`} aria-pressed={Boolean(birdSpots.saved(observation.locId ?? ""))} disabled={!birdSpots.available || birdSpots.pending.has(observation.locId ?? "")} onClick={() => birdSpots.toggleObservation(observation)}>{birdSpots.saved(observation.locId ?? "") ? "★" : "☆"}</button>
+                  </div>}
                   <button
                     className="observation-select"
                     type="button"
+                    aria-label={`選取 ${observation.locName}`}
                     aria-pressed={selected}
                     onClick={() => activate(index, true)}
                   >
                     <span className="observation-title">
-                      <span className="observation-loc-name">{observation.locName}</span>
+                      {!selected && <span className="observation-loc-name">{observation.locName}</span>}
                       <span className="observation-count">{observation.howMany ?? "數量未知"}</span>
                     </span>
                     <span className="observation-meta">
@@ -525,6 +598,9 @@ export function SearchWorkspace() {
           </ul>
         </aside>
         )}
+        <SearchBirdSpotDetail model={birdSpots} sheetState={sheetState} headingRef={detailHeadingRef} onBack={backFromSpot}
+          onToggleSheet={() => setSheetState(state => state === "expanded" ? "half" : "expanded")}
+          onCollapse={() => { setSheetState("collapsed"); window.requestAnimationFrame(() => reopenResultsRef.current?.focus()); }} />
       </section>
     </main>
   );

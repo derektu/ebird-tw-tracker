@@ -138,7 +138,7 @@ Node 與 Search App Worker 提供 `GET /api/bird-spots/observations?locId=L11045
 
 ## 鳥點收藏保存
 
-Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除。Desktop 已接入鳥點搜尋與收藏管理；Search App 畫面由後續票接入。
+Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的 `saved-bird-spots.json`；Electron 沿用 user-data，不受 localhost port 改變影響。Search App 使用目前 origin 的獨立 IndexedDB，Worker 不保存收藏。收藏、別名與筆記不隨 API key 移除而刪除。Desktop 已接入鳥點搜尋與收藏管理；Search App 可從鳥種紀錄收藏鳥點並查看 [鳥點詳情](docs/search-app-bird-spot-details.md)。
 
 資料規則、Node CRUD API、IndexedDB transaction 與驗證界線見 [鳥點收藏保存契約](docs/saved-bird-spot-storage.md)。
 
@@ -146,7 +146,7 @@ Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的
 
 Desktop 與本機 Web 可從觀察卡、地圖 popup 或鳥點名稱搜尋收藏鳥點，再查看同一地點最近 1–30 天各鳥種的最新紀錄。右上「我的鳥點」提供收藏搜尋、排序、別名、筆記與釘選管理。未儲存修改可選擇儲存、捨棄或繼續編輯；取消收藏提供復原。舊紀錄缺少地點 ID 時需重新搜尋，鳥點查詢不修改鳥種 Search Baseline。操作與驗證見 [Desktop 鳥點功能](docs/desktop-bird-spots.md)。
 
-匯入匯出與 Search App 鳥點畫面由後續 tickets 交付。
+匯入匯出與 Search App 鳥點名稱搜尋、收藏管理由後續 tickets 交付。
 
 ## Production web build
 

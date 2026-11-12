@@ -69,20 +69,9 @@ export function SearchApp() {
     return <ApiKeyGate busy={state === "checking"} error={error} onSubmit={validateAndSave} />;
   }
 
-  return (
-    <>
-      <SearchWorkspace />
-      <button
-        className="search-app-secondary forget-key-button"
-        type="button"
-        onClick={() => {
-          forgetBrowserApiKey();
-          setError(null);
-          setState("gate");
-        }}
-      >
-        忘記 API key
-      </button>
-    </>
-  );
+  return <SearchWorkspace onForgetKey={() => {
+    forgetBrowserApiKey();
+    setError(null);
+    setState("gate");
+  }} />;
 }

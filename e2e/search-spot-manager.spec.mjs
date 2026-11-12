@@ -387,3 +387,41 @@ test("detail notes guard mode changes, search, favorite removal and forgetting t
   await expect(button(page, "驗證 API key")).toBeVisible();
   expect((await db(page, "read")).find(s => s.locId === "L102").note).toBe("pending");
 });
+
+for (const width of [320, 390, 402]) {
+  test(`mobile workspace uses the available width without stacked outer insets at ${width}px`, async ({ page }) => {
+    await setup(page, { width });
+    const box = await page.locator('.search-form-card').boundingBox();
+    expect(box.x).toBeLessThanOrEqual(6);
+    expect(width - box.x - box.width).toBeLessThanOrEqual(6);
+  });
+}
+
+test('focused editor fields stay inside the scrolling area after keyboard resize and viewport pan', async ({ page }) => {
+  await setup(page);
+  await openManager(page);
+  await button(manager(page), '編輯 地點 02').click();
+  const fit = async (height, top) => page.evaluate(({ height, top }) => {
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: height });
+    Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: top });
+    visualViewport.dispatchEvent(new Event('resize'));
+    visualViewport.dispatchEvent(new Event('scroll'));
+  }, { height, top });
+  const visible = input => input.evaluate(node => {
+    const rect = node.getBoundingClientRect();
+    const fields = node.closest('.spot-editor-fields').getBoundingClientRect();
+    const footer = document.querySelector('.spot-editor-actions').getBoundingClientRect();
+    return rect.top >= fields.top && rect.bottom <= Math.min(fields.bottom, footer.top);
+  });
+  await field(page, '別名').focus();
+  await fit(352, 130);
+  await expect.poll(() => visible(field(page, '別名'))).toBe(true);
+  await field(page, '筆記').focus();
+  await fit(310, 180);
+  await expect.poll(() => visible(field(page, '筆記'))).toBe(true);
+  await field(page, '筆記').fill('鍵盤抬起後仍能輸入');
+  await fit(844, 0);
+  await expect.poll(() => visible(field(page, '筆記'))).toBe(true);
+  await button(manager(page), '儲存').click();
+  expect((await db(page, 'read')).find(s => s.locId === 'L102').note).toBe('鍵盤抬起後仍能輸入');
+});

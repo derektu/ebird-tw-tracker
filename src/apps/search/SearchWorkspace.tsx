@@ -90,7 +90,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const showingDetail = birdSpots.view.kind === "detail";
 
   const [query, setQuery] = useState("");
-  const [days, setDays] = useState(3);
+  const [days, setDays] = useState("3");
   const [selectedSpecies, setSelectedSpecies] = useState<Species | null>(null);
   const [suggestions, setSuggestions] = useState<Species[]>([]);
   const [recentSpecies, setRecentSpecies] = useState<Species[]>(() => readRecentSpecies());
@@ -384,7 +384,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
       }
       directory.cancel();
       navigation.search("results");
-      void workflow.run({ source: "explicit", species: chosen, query: chosen ? undefined : normalizedQuery, days });
+      void workflow.run({ source: "explicit", species: chosen, query: chosen ? undefined : normalizedQuery, days: Number(days) });
     });
   };
   const chooseMode = (next: typeof mode) => {
@@ -501,9 +501,11 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
               type="number"
               min={1}
               max={30}
+              step={1}
+              required
               value={days}
               disabled={busy}
-              onChange={(event) => setDays(Number(event.target.value))}
+              onChange={(event) => setDays(event.target.value)}
             />
           </label>
           </>}

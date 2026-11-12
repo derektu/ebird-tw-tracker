@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { SearchBirdSpots } from "./useSearchBirdSpots";
 
@@ -16,6 +16,12 @@ export function SearchBirdSpotDetail({ model, editor, sheetState, onBack, onTogg
   headingRef: RefObject<HTMLButtonElement | null>;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const queryFormRef = useRef<HTMLFormElement>(null);
+  const [daysDraft, setDaysDraft] = useState(String(model.days));
+  useEffect(() => setDaysDraft(String(model.days)), [model.days, model.view]);
+  const refresh = () => {
+    if (queryFormRef.current?.reportValidity()) model.refresh();
+  };
   if (model.view.kind !== "detail" || !model.detailSpot) return null;
   const { view, recent } = model;
   const spot = model.detailSpot, favorite = model.saved(spot.locId);
@@ -30,15 +36,18 @@ export function SearchBirdSpotDetail({ model, editor, sheetState, onBack, onTogg
       <button className="spot-icon-button mobile-spot-sheet-control" aria-label="收合鳥點詳情" onClick={onCollapse}>×</button>
     </header>
     <div className="search-spot-context">{spot.locationType === "hotspot" ? "公共熱點" : spot.locationType === "personal" ? "個人地點" : "地點類型未知"} · {spot.locId}{spot.lat === null && " · 無座標"}</div>
-    <div className="search-spot-query">
-      <label>近 <input aria-label="鳥點最近天數" type="number" min={1} max={30} value={model.days} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 1 && value <= 30) model.setDays(value); }} /> 天</label>
+    <form className="search-spot-query" ref={queryFormRef} onSubmit={event => { event.preventDefault(); refresh(); }}>
+      <label>近 <input aria-label="鳥點最近天數" type="number" min={1} max={30} step={1} required value={daysDraft} onChange={event => {
+        setDaysDraft(event.target.value);
+        if (event.target.validity.valid) model.setDays(event.target.valueAsNumber);
+      }} /> 天</label>
       {view.species && <select aria-label="鳥點鳥種篩選" value={model.onlySpecies ? "original" : "all"} onChange={event => model.setOnlySpecies(event.target.value === "original")}><option value="all">全部鳥種</option><option value="original">只看{view.species.comName}</option></select>}
-      <button className="search-app-secondary" onClick={model.refresh}>更新</button>
-    </div>
+      <button className="search-app-secondary" type="submit">更新</button>
+    </form>
     <p className="search-spot-hint">各鳥種最新一筆{recent.kind === "ready" && ` · ${new Date(recent.response.generatedAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })} 更新`}</p>
     <div className="search-spot-scroll" ref={listRef}>
       {recent.kind === "loading" && <p role="status">正在取得鳥點近期紀錄…</p>}
-      {recent.kind === "error" && <div role="alert"><p>{recent.message}</p><button className="search-app-secondary" onClick={model.refresh}>重試查詢</button></div>}
+      {recent.kind === "error" && <div role="alert"><p>{recent.message}</p><button className="search-app-secondary" onClick={refresh}>重試查詢</button></div>}
       {recent.kind === "ready" && !rows.length && <p>最近 {model.days} 天沒有可取得的公開紀錄。這不代表此地沒有鳥；收藏與筆記仍會保留。</p>}
       {rows.map(row => <article className="search-spot-row" key={`${row.speciesCode}:${row.subId}`}>
         <a className="search-spot-species-link" href={`https://ebird.org/species/${encodeURIComponent(row.speciesCode)}`} target="_blank" rel="noreferrer"><strong>{row.comName || row.sciName || row.speciesCode} ↗</strong><span>{row.obsDt}</span></a>

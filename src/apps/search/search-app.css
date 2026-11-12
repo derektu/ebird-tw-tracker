@@ -725,6 +725,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
 .search-spot-heading strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
 .search-spot-context { flex: 0 0 auto; padding: 4px 12px 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .search-spot-query { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 10px; }
+.search-spot-query input, .search-spot-query select, .search-spot-query button { box-sizing: border-box; height: 44px; }
 .search-spot-query label { display: flex; flex: 0 0 auto; gap: 3px; align-items: center; font-size: 13px; white-space: nowrap; }
 .search-spot-query input { width: 46px; min-height: 44px; border: 1px solid var(--border); border-radius: 6px; padding: 0 3px; font: inherit; font-size: 16px; }
 .search-spot-query select { flex: 1; min-width: 0; min-height: 44px; background: white; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 13px; padding: 0 4px; color: var(--fg); }

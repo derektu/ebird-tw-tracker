@@ -46,6 +46,88 @@ async function readDatabase(page, name, store) {
 const favorites = page => readDatabase(page, "ebird-saved-bird-spots", "saved-bird-spots");
 const baseline = page => readDatabase(page, "ebird-search-snapshots", "search-snapshots");
 
+test("species days can be cleared with Backspace before replacement and invalid drafts never search", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const requests = [];
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/observations") requests.push(request.url()); });
+  await setup(page);
+  await page.getByRole("button", { name: "展開搜尋條件" }).click();
+  await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
+  const days = page.getByRole("spinbutton", { name: "最近天數", exact: true });
+  await days.focus();
+  await days.press("Backspace");
+  await expect(days).toHaveValue("");
+  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  expect(requests).toHaveLength(0);
+  expect(await days.evaluate(node => node.validity.valueMissing)).toBe(true);
+  for (const invalid of ["0", "31", "1.5"]) {
+    await days.fill(invalid);
+    await page.getByRole("button", { name: "搜尋", exact: true }).click();
+    expect(await days.evaluate(node => node.checkValidity())).toBe(false);
+    expect(requests).toHaveLength(0);
+  }
+  await days.fill("14");
+  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await expect(page.locator(".observation-card")).toHaveCount(12);
+  expect(requests.map(url => new URL(url).searchParams.get("days"))).toEqual(["14"]);
+});
+
+test("spot days allow clearing and invalid drafts cannot update or retry the previous range", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const requests = [];
+  let fail = false;
+  await setup(page, { recentHandler: route => {
+    const url = new URL(route.request().url());
+    requests.push(url.searchParams.get("days"));
+    return fail ? route.fulfill({ status: 503, json: { message: "fixture failure" } }) : route.fulfill({ json: recent(url.searchParams.get("locId")) });
+  } });
+  await search(page); await open(page);
+  const snapshot = await baseline(page);
+  const days = detail(page).getByRole("spinbutton", { name: "鳥點最近天數" });
+  await days.focus(); await days.press("Backspace");
+  await expect(days).toHaveValue("");
+  const before = requests.length;
+  await detail(page).getByRole("button", { name: "更新", exact: true }).click();
+  expect(requests).toHaveLength(before);
+  expect(await days.evaluate(node => node.validity.valueMissing)).toBe(true);
+  for (const invalid of ["0", "31", "1.5"]) {
+    await days.fill(invalid);
+    await detail(page).getByRole("button", { name: "更新", exact: true }).click();
+    expect(await days.evaluate(node => node.checkValidity())).toBe(false);
+    expect(requests).toHaveLength(before);
+  }
+  await days.fill("14");
+  await expect.poll(() => requests.at(-1)).toBe("14");
+  await expect(detail(page).locator(".search-spot-row")).toHaveCount(8);
+  fail = true;
+  await detail(page).getByRole("button", { name: "更新", exact: true }).click();
+  await expect(detail(page).getByRole("button", { name: "重試查詢" })).toBeVisible();
+  await days.fill("");
+  const failedCount = requests.length;
+  await detail(page).getByRole("button", { name: "重試查詢" }).click();
+  expect(requests).toHaveLength(failedCount);
+  expect(await days.evaluate(node => node.validity.valueMissing)).toBe(true);
+  await detail(page).getByRole("button", { name: "返回搜尋結果" }).click();
+  expect(await baseline(page)).toEqual(snapshot);
+  fail = false;
+  await open(page);
+  await expect(detail(page).getByRole("spinbutton", { name: "鳥點最近天數" })).toHaveValue("3");
+});
+
+for (const width of [320, 390, 402]) {
+  test(`spot range filter and update share a 44px height at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await setup(page); await search(page); await open(page);
+    const controls = await detail(page).locator(".search-spot-query").evaluate(node => ({
+      heights: [...node.querySelectorAll("input, select, button")].map(control => control.getBoundingClientRect().height),
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    }));
+    expect(controls.heights).toHaveLength(3);
+    expect(controls.heights).toEqual([44, 44, 44]);
+    expect(controls.overflow).toBe(false);
+  });
+}
+
 for (const width of [320, 390, 402, 1440]) {
   test(`bird-spot detail preserves the compact search layout and accessible controls at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 844 });

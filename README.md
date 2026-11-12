@@ -146,7 +146,7 @@ Desktop 與本機 Web 的收藏由 Node 保存於 application data directory 的
 
 Desktop 與本機 Web 可從觀察卡、地圖 popup 或鳥點名稱搜尋收藏鳥點，再查看同一地點最近 1–30 天各鳥種的最新紀錄。右上「我的鳥點」提供收藏搜尋、排序、別名、筆記與釘選管理。未儲存修改可選擇儲存、捨棄或繼續編輯；取消收藏提供復原。舊紀錄缺少地點 ID 時需重新搜尋，鳥點查詢不修改鳥種 Search Baseline。操作與驗證見 [Desktop 鳥點功能](docs/desktop-bird-spots.md)。
 
-匯入匯出與 Search App 鳥點名稱搜尋、收藏管理由後續 tickets 交付。
+兩版的鳥點收藏各自保存在本機，不提供匯入、匯出或跨裝置同步。
 
 ## Production web build
 

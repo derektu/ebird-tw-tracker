@@ -1,5 +1,5 @@
 import L, { type Map as LeafletMap, type Marker } from "leaflet";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchObservations, resolveSpecies, searchSpecies } from "../../api/search-app-client.mjs";
 import { readBrowserApiKey } from "../../storage/browser-api-key";
 import { createMarkerClassName } from "../../features/map/marker-presentation.mjs";
@@ -14,6 +14,12 @@ import { readRecentSpecies, recordRecentSpecies } from "./recent-species-store.m
 
 import { useSearchBirdSpots } from "./useSearchBirdSpots";
 import { SearchBirdSpotDetail, SearchBirdSpotMessages, type SheetState } from "./SearchBirdSpotDetail";
+
+import { useSpotDirectory } from "./useSpotDirectory";
+import { useSpotEditor } from "./useSpotEditor";
+import { SearchSpotManager, SpotLeaveDialog } from "./SearchSpotManager";
+import { SearchSpotResults } from "./SearchSpotResults";
+import { useSpotWorkspaceNavigation } from "./useSpotWorkspaceNavigation";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
@@ -77,6 +83,10 @@ function createPopup(observation: Observation) {
 
 export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const birdSpots = useSearchBirdSpots();
+  const editor = useSpotEditor(birdSpots);
+  const directory = useSpotDirectory();
+  const [mode, setMode] = useState<"species" | "spots">("species");
+  const showingNames = birdSpots.view.kind === "spot-results";
   const showingDetail = birdSpots.view.kind === "detail";
 
   const [query, setQuery] = useState("");
@@ -104,42 +114,21 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const reopenResultsRef = useRef<HTMLButtonElement>(null);
   const listItemsRef = useRef<Array<HTMLLIElement | null>>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusExpandedForm = useRef(false);
   const compactSearchRef = useRef<HTMLButtonElement>(null);
 
-  const resultListRef = useRef<HTMLUListElement>(null);
-  const resultsSideRef = useRef<HTMLElement>(null);
-  const detailHeadingRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (controlsExpanded && focusExpandedForm.current) searchInputRef.current?.focus();
+    focusExpandedForm.current = false;
+  }, [controlsExpanded]);
+
   const detailMarkerRef = useRef<Marker | null>(null);
-  const returnSnapshot = useRef<{ center: L.LatLng; zoom: number; sheet: SheetState; listScroll: number; sideScroll: number; focus: HTMLElement | null } | null>(null);
-  const restoringResults = useRef(false);
-  const openSpot = (observation: Observation) => {
-    const map = mapRef.current;
-    if (!map) return;
-    const snapshot = { center: map.getCenter(), zoom: map.getZoom(), sheet: sheetState,
-      listScroll: resultListRef.current?.scrollTop ?? 0, sideScroll: resultsSideRef.current?.scrollTop ?? 0,
-      focus: document.activeElement instanceof HTMLElement ? document.activeElement : null };
-    if (!birdSpots.openObservation(observation, species)) return;
-    returnSnapshot.current = snapshot;
-    setSheetState("half");
-    window.requestAnimationFrame(() => detailHeadingRef.current?.focus({ preventScroll: true }));
-  };
-  const backFromSpot = () => {
-    const snapshot = returnSnapshot.current;
-    restoringResults.current = true;
-    birdSpots.close();
-    if (snapshot) {
-      setSheetState(snapshot.sheet);
-      window.requestAnimationFrame(() => {
-        mapRef.current?.invalidateSize();
-        mapRef.current?.setView(snapshot.center, snapshot.zoom, { animate: false });
-        if (resultListRef.current) resultListRef.current.scrollTop = snapshot.listScroll;
-        if (resultsSideRef.current) resultsSideRef.current.scrollTop = snapshot.sideScroll;
-        snapshot.focus?.focus({ preventScroll: true });
-        restoringResults.current = false;
-      });
-    }
-    returnSnapshot.current = null;
-  };
+  const nameHandleRef = useRef<HTMLButtonElement>(null);
+  const navigation = useSpotWorkspaceNavigation({
+    model: birdSpots, editor, map: mapRef, sheet: sheetState, setSheet: setSheetState,
+    expanded: controlsExpanded, setExpanded: setControlsExpanded, cancelSpecies: () => workflowRef.current?.invalidate(),
+  });
+  const { resultList: resultListRef, resultsSide: resultsSideRef, detailHeading: detailHeadingRef, restoring: restoringResults } = navigation;
 
   if (!workflowRef.current) {
     const runtime = createSearchAppRuntime({
@@ -197,6 +186,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     });
   }
   const workflow = workflowRef.current;
+  useEffect(() => () => workflow.invalidate(), [workflow]);
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 720px)");
     const resize = () => { if (!mobile.matches) setSheetState("half"); };
@@ -273,36 +263,35 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     // activate(); this effect only rebuilds markers when the collection changes.
   }, [observations, comparison, activate]);
 
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const frame = window.requestAnimationFrame(() => mapRef.current?.invalidateSize());
-    return () => window.cancelAnimationFrame(frame);
-  }, [sheetState]);
+  useLayoutEffect(() => {
+    if (!navigation.managerVisible) mapRef.current?.invalidateSize({ animate: false });
+  }, [sheetState, birdSpots.view.kind, controlsExpanded, navigation.managerVisible]);
 
   useEffect(() => {
-    if (showingDetail || restoringResults.current || sheetState === "collapsed" || activeIndex < 0) return;
+    if (birdSpots.view.kind !== "results" || restoringResults.current || sheetState === "collapsed" || activeIndex < 0) return;
     const item = listItemsRef.current[activeIndex];
     if (!item) return;
     const frame = window.requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
     return () => window.cancelAnimationFrame(frame);
-  }, [activeIndex, sheetState, showingDetail]);
+  }, [activeIndex, sheetState, birdSpots.view.kind, restoringResults]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
-    if (!normalizedQuery || normalizedQuery === selectedSpecies?.comName) {
+    if (mode !== "species" || !normalizedQuery || normalizedQuery === selectedSpecies?.comName) {
       setSuggestions([]);
       return;
     }
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const results = await searchSpecies(normalizedQuery, { apiKey: readBrowserApiKey() ?? "" });
-        setSuggestions(results);
+        const results = await searchSpecies(normalizedQuery, { apiKey: readBrowserApiKey() ?? "", signal: controller.signal });
+        if (!controller.signal.aborted) setSuggestions(results);
       } catch {
-        setSuggestions([]);
+        if (!controller.signal.aborted) setSuggestions([]);
       }
     }, 220);
-    return () => window.clearTimeout(timer);
-  }, [query, selectedSpecies?.comName]);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [mode, query, selectedSpecies?.comName]);
 
   useEffect(() => {
     if (!suggestions.length && !showRecent) return;
@@ -320,7 +309,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    entriesRef.current.forEach(({ marker }) => { if (showingDetail) marker.remove(); else marker.addTo(map); });
+    entriesRef.current.forEach(({ marker }) => { if (birdSpots.view.kind === "results") marker.addTo(map); else marker.remove(); });
     map.closePopup();
     if (showingDetail && detailLat != null && detailLng != null) {
       const element = document.createElement("div"); element.className = "bird-marker active"; element.textContent = "●";
@@ -331,7 +320,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
       map.setView([detailLat, detailLng], 13, { animate: false });
     }
     return () => { detailMarkerRef.current?.remove(); detailMarkerRef.current = null; };
-  }, [showingDetail, detailLat, detailLng, observations]);
+  }, [birdSpots.view.kind, showingDetail, detailLat, detailLng, observations]);
 
   const chooseSpecies = useCallback((chosen: Species) => {
     setSelectedSpecies(chosen);
@@ -340,49 +329,69 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     setShowRecent(false);
   }, []);
 
-  const submitSearch = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    editor.request("search", () => {
+      if (mode === "spots") {
+        workflow.invalidate();
+        navigation.search("spot-results");
+        void directory.search();
+        setSheetState("half");
+        setControlsExpanded(false);
+        requestAnimationFrame(() => {
+          if (window.matchMedia("(max-width: 720px)").matches) compactSearchRef.current?.focus();
+        });
+        return;
+      }
       const normalizedQuery = query.trim();
-      const species =
-        selectedSpecies && (normalizedQuery === selectedSpecies.comName || normalizedQuery === selectedSpecies.speciesCode)
-          ? selectedSpecies
-          : undefined;
-      if (!species && !normalizedQuery) {
+      const chosen = selectedSpecies && (normalizedQuery === selectedSpecies.comName || normalizedQuery === selectedSpecies.speciesCode) ? selectedSpecies : undefined;
+      if (!chosen && !normalizedQuery) {
         setControlsExpanded(true);
         setErrorMessage("請輸入鳥種名稱、英文名或 species code");
         return;
       }
-      birdSpots.close();
-      returnSnapshot.current = null;
-      void workflow.run({ source: "explicit", species, query: species ? undefined : normalizedQuery, days });
-    },
-    [days, query, selectedSpecies, workflow, birdSpots.close],
-  );
+      directory.cancel();
+      navigation.search("results");
+      void workflow.run({ source: "explicit", species: chosen, query: chosen ? undefined : normalizedQuery, days });
+    });
+  };
+  const chooseMode = (next: typeof mode) => {
+    if (mode === next) return;
+    editor.request("mode", () => {
+      workflow.invalidate();
+      setMode(next);
+      setErrorMessage(null);
+    });
+  };
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
 
   const comparisonPresentation = presentSearchComparison(comparison);
 
-  return (
-    <main className="search-workspace">
+  const nameSummary = directory.result.kind !== "idle" && (showingNames || (birdSpots.view.kind === "detail" && birdSpots.view.origin.kind === "spot-results"))
+    ? directory.result.query || "所有鳥點" : null;
+  const toggleSheet = () => setSheetState(state => state === "expanded" ? "half" : "expanded");
+  const collapse = () => { setSheetState("collapsed"); requestAnimationFrame(() => reopenResultsRef.current?.focus()); };
+  return (<>
+    <main className="search-workspace" inert={editor.leave.kind !== "idle"}>
       <section
         className={`search-form-card${!controlsExpanded ? " mobile-search-controls-compact" : ""}`}
+        hidden={Boolean(navigation.manager)}
         aria-labelledby="search-workspace-title"
       >
         {!controlsExpanded && (
           <div className="mobile-search-toolbar" role="group" aria-label="目前搜尋條件">
-            <span className="mobile-search-species">{species?.comName ?? "搜尋條件"}</span>
-            <span className="mobile-search-days">{publishedDays == null ? "尚未搜尋" : `最近 ${publishedDays} 天`}</span>
+            <span className="mobile-search-species">{nameSummary ?? species?.comName ?? "搜尋條件"}</span>
+            <span className="mobile-search-days">{nameSummary ? "鳥點" : publishedDays == null ? "尚未搜尋" : `最近 ${publishedDays} 天`}</span>
             <button
               className="search-app-secondary mobile-edit-search-button"
               type="button"
               ref={compactSearchRef}
               onClick={() => {
+                focusExpandedForm.current = true;
                 setControlsExpanded(true);
-                window.requestAnimationFrame(() => searchInputRef.current?.focus());
               }}
             >
-              {species ? "修改搜尋" : "展開搜尋條件"}
+              {species || nameSummary ? "修改搜尋" : "展開搜尋條件"}
             </button>
           </div>
         )}
@@ -399,9 +408,16 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
             收合條件
           </button>
         </div>
-        <h1 id="search-workspace-title">搜尋台灣鳥種觀察紀錄</h1>
+        <div className="spot-search-nav" role="group" aria-label="搜尋模式">
+          <button type="button" aria-pressed={mode === "species"} onClick={() => chooseMode("species")}>鳥種</button>
+          <button type="button" aria-pressed={mode === "spots"} onClick={() => chooseMode("spots")}>鳥點</button>
+          <button type="button" onClick={e => navigation.openManager(e.currentTarget)}>我的鳥點</button>
+        </div>
+        <h1 id="search-workspace-title">{mode === "species" ? "搜尋台灣鳥種觀察紀錄" : "搜尋鳥點"}</h1>
         <form className="search-form" onSubmit={submitSearch}>
-          <label className="field species-field" ref={fieldRef}>
+          {mode === "spots" ? <label className="field species-field"><span>鳥點名稱</span>
+            <input ref={searchInputRef} value={directory.query} onChange={event => directory.setQuery(event.target.value)} placeholder="地名、地區、收藏別名或筆記" />
+          </label> : <><label className="field species-field" ref={fieldRef}>
             <span>鳥種</span>
             <input
               type="text"
@@ -458,13 +474,14 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
               onChange={(event) => setDays(Number(event.target.value))}
             />
           </label>
-          <button className="search-app-primary" type="submit" disabled={busy}>
-            {busy ? "搜尋中…" : "搜尋"}
+          </>}
+          <button className="search-app-primary" type="submit" disabled={mode === "species" && busy}>
+            {mode === "species" && busy ? "搜尋中…" : "搜尋"}
           </button>
         </form>
-        <button className="search-app-secondary workspace-forget-key" type="button" onClick={onForgetKey}>忘記 API key</button>
+        <button className="search-app-secondary workspace-forget-key" type="button" onClick={() => editor.request("back", onForgetKey)}>忘記 API key</button>
         {errorMessage && <p className="api-key-error" role="alert">{errorMessage}</p>}
-        {species && (
+        {!nameSummary && species && (
           <p className="search-results-summary">
             {species.comName}（{species.speciesCode}）最近 {publishedDays} 天：{observations.length} 筆有座標紀錄
             {comparisonPresentation.compactText && (
@@ -474,19 +491,21 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
             )}
           </p>
         )}
-        {comparisonPresentation.assistiveStatus && (
+        {!nameSummary && comparisonPresentation.assistiveStatus && (
           <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
         )}
-        {searched && observations.length === 0 && (
+        {!nameSummary && searched && observations.length === 0 && (
           <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>
         )}
       </section>
 
-        {comparisonPresentation.warningText && (
+        {!nameSummary && !navigation.manager && comparisonPresentation.warningText && (
           <p className="search-comparison warning" role="alert">{comparisonPresentation.warningText}</p>
         )}
       <SearchBirdSpotMessages model={birdSpots} />
-      <section className="workspace" aria-label="觀察紀錄地圖與列表">
+      {navigation.manager && <SearchSpotManager model={birdSpots} editor={editor} view={navigation.manager} hidden={!navigation.managerVisible}
+        headerRef={navigation.managerHeader} onClose={navigation.closeManager} onRecent={navigation.open} />}
+      <section hidden={navigation.managerVisible} className="workspace" aria-label="觀察紀錄地圖與列表">
         <div className="map-shell">
           <div ref={mapNodeRef} id="map" aria-label="鳥種觀察位置地圖" />
           <button
@@ -496,23 +515,23 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
           >
             顯示全台
           </button>
-          {(observations.length > 0 || showingDetail) && sheetState === "collapsed" && (
+          {(observations.length > 0 || showingDetail || showingNames) && sheetState === "collapsed" && (
             <button
               className="reopen-results-button"
               type="button"
               ref={reopenResultsRef}
-              aria-label={showingDetail ? "重開鳥點詳情" : `顯示 ${observations.length} 筆結果${comparisonPresentation.compactText ? `，${comparisonPresentation.compactText}` : ""}`}
+              aria-label={showingDetail ? "重開鳥點詳情" : showingNames ? "顯示鳥點搜尋結果" : `顯示 ${observations.length} 筆結果${comparisonPresentation.compactText ? `，${comparisonPresentation.compactText}` : ""}`}
               onClick={() => {
                 setSheetState("half");
-                window.requestAnimationFrame(() => (showingDetail ? detailHeadingRef.current : sheetHandleRef.current)?.focus());
+                window.requestAnimationFrame(() => (showingDetail ? detailHeadingRef.current : showingNames ? nameHandleRef.current : sheetHandleRef.current)?.focus());
               }}
             >
-              {showingDetail ? "重開鳥點詳情" : `顯示 ${observations.length} 筆結果`}
+              {showingDetail ? "重開鳥點詳情" : showingNames ? "顯示鳥點搜尋結果" : `顯示 ${observations.length} 筆結果`}
             </button>
           )}
         </div>
         {observations.length > 0 && (
-        <aside ref={resultsSideRef} className="side" hidden={showingDetail} data-sheet-state={sheetState} aria-label="搜尋結果">
+        <aside ref={resultsSideRef} className="side" hidden={birdSpots.view.kind !== "results"} data-sheet-state={sheetState} aria-label="搜尋結果">
           <div className="bottom-sheet-controls">
             <span className="bottom-sheet-result-summary">
               {observations.length} 筆結果
@@ -553,7 +572,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
                   ref={(node) => { listItemsRef.current[index] = node; }}
                 >
                   {selected && <div className="observation-location-row">
-                    <button className="observation-spot-name" aria-label={`查看鳥點 ${observation.locName}`} onClick={() => openSpot(observation)}>{observation.locName} <span aria-hidden="true">›</span></button>
+                    <button className="observation-spot-name" aria-label={`查看鳥點 ${observation.locName}`} onClick={() => navigation.openObservation(observation, species)}>{observation.locName} <span aria-hidden="true">›</span></button>
                     <button className="spot-icon-button" aria-label={`${birdSpots.saved(observation.locId ?? "") ? "取消收藏" : "收藏"} ${observation.locName}`} aria-pressed={Boolean(birdSpots.saved(observation.locId ?? ""))} disabled={!birdSpots.available || birdSpots.pending.has(observation.locId ?? "")} onClick={() => birdSpots.toggleObservation(observation)}>{birdSpots.saved(observation.locId ?? "") ? "★" : "☆"}</button>
                   </div>}
                   <button
@@ -598,10 +617,12 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
           </ul>
         </aside>
         )}
-        <SearchBirdSpotDetail model={birdSpots} sheetState={sheetState} headingRef={detailHeadingRef} onBack={backFromSpot}
-          onToggleSheet={() => setSheetState(state => state === "expanded" ? "half" : "expanded")}
-          onCollapse={() => { setSheetState("collapsed"); window.requestAnimationFrame(() => reopenResultsRef.current?.focus()); }} />
+        <SearchSpotResults directory={directory} model={birdSpots} sheet={sheetState} hidden={!showingNames} handleRef={nameHandleRef} listRef={navigation.nameList}
+          onOpen={spot => navigation.open(spot, { kind: "spot-results" })} onToggleSheet={toggleSheet} onCollapse={collapse} />
+        <SearchBirdSpotDetail model={birdSpots} editor={editor} sheetState={sheetState} headingRef={detailHeadingRef} listRef={navigation.detailList}
+          onBack={navigation.back} onToggleSheet={toggleSheet} onCollapse={collapse} />
       </section>
     </main>
-  );
+    <SpotLeaveDialog editor={editor} error={birdSpots.actionError} />
+  </>);
 }

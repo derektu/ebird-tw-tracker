@@ -2,14 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchBirdSpotRecent } from "../../api/search-app-client.mjs";
 import { normalizeBirdSpot } from "../../domain/bird-spots.mjs";
 import { readBrowserApiKey } from "../../storage/browser-api-key";
-import type { BirdSpot, BirdSpotRecentResponse, Observation, SavedBirdSpot, SavedBirdSpotStore, Species } from "../../types/domain";
+import type { BirdSpot, BirdSpotRecentResponse, Observation, SavedBirdSpot, Species } from "../../types/domain";
 import { createIndexedDbSavedBirdSpotStore } from "./browser-saved-bird-spots.mjs";
 
-type View = { kind: "results" } | { kind: "detail"; spot: BirdSpot; species: Species | null };
+export type ResultView = { kind: "results" } | { kind: "spot-results" };
+export type ManagerView = { kind: "saved-list" } | { kind: "saved-edit"; locId: string };
+type Origin = ResultView | ManagerView;
+export type SpotView = Origin | { kind: "detail"; spot: BirdSpot; species: Species | null; origin: Origin };
+export type SpotFields = Pick<SavedBirdSpot, "alias" | "note" | "pinned">;
+
 type Collection = { kind: "loading" } | { kind: "ready"; spots: SavedBirdSpot[] } | { kind: "error"; message: string };
 type Recent = { kind: "loading" } | { kind: "ready"; response: BirdSpotRecentResponse } | { kind: "error"; message: string };
 interface Dependencies {
-  store: SavedBirdSpotStore;
+  store: ReturnType<typeof createIndexedDbSavedBirdSpotStore>;
   fetchRecent(request: { locId: string; days: number }, signal: AbortSignal): Promise<BirdSpotRecentResponse>;
 }
 const browserDependencies: Dependencies = {
@@ -19,8 +24,13 @@ const browserDependencies: Dependencies = {
 const messageFor = (error: unknown) => error instanceof Error ? error.message : "目前無法完成操作，請稍後重試";
 
 export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies) {
-  const [view, setView] = useState<View>({ kind: "results" });
-  const [collection, setCollection] = useState<Collection>({ kind: "loading" });
+  const [view, setView] = useState<SpotView>({ kind: "results" });
+  const [collection, renderCollection] = useState<Collection>({ kind: "loading" });
+  const collectionRef = useRef(collection);
+  const setCollection = useCallback((next: Collection | ((previous: Collection) => Collection)) => {
+    collectionRef.current = typeof next === "function" ? next(collectionRef.current) : next;
+    renderCollection(collectionRef.current);
+  }, []);
   const [recent, setRecent] = useState<Recent>({ kind: "loading" });
   const [days, setDays] = useState(3);
   const [onlySpecies, setOnlySpecies] = useState(false);
@@ -28,6 +38,7 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
   const [pending, setPending] = useState(new Set<string>());
   const locks = useRef(new Set<string>());
   const generation = useRef(0);
+  const resumed = useRef<SpotView | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -36,11 +47,12 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
     setCollection({ kind: "loading" });
     try { setCollection({ kind: "ready", spots: await store.list() }); }
     catch (error) { setCollection({ kind: "error", message: messageFor(error) }); }
-  }, [store]);
+  }, [store, setCollection]);
   useEffect(() => { void loadCollection(); }, [loadCollection]);
   const invalidate = useCallback(() => { generation.current++; requestRef.current?.abort(); }, []);
   useEffect(() => {
     if (view.kind !== "detail") return;
+    if (resumed.current === view) { resumed.current = null; return; }
     const token = ++generation.current;
     const controller = new AbortController();
     requestRef.current = controller;
@@ -62,12 +74,22 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
     const timer = window.setTimeout(() => setUndo(null), 8000);
     return () => window.clearTimeout(timer);
   }, [undo]);
-  const close = useCallback(() => { invalidate(); setView({ kind: "results" }); }, [invalidate]);
+  const navigate = useCallback((next: SpotView) => { invalidate(); setView(next); }, [invalidate]);
+  const resumeView = () => {
+    if (view.kind === "detail") {
+      if (recent.kind !== "loading") resumed.current = view;
+      setRecent(recent); setDays(days); setOnlySpecies(onlySpecies);
+    }
+    navigate(view);
+  };
+  const open = (spot: BirdSpot, origin: Origin, species: Species | null = null) => {
+    setDays(3); setOnlySpecies(false); setRecent({ kind: "loading" }); setActionError("");
+    navigate({ kind: "detail", spot, species, origin });
+  };
   const openObservation = (observation: Observation, species: Species | null) => {
     const spot = normalizeBirdSpot(observation);
     if (!spot) { setActionError("這筆舊紀錄沒有鳥點 ID，請重新搜尋後再查看或收藏。"); return false; }
-    invalidate(); setDays(3); setOnlySpecies(false); setRecent({ kind: "loading" }); setActionError("");
-    setView({ kind: "detail", spot, species });
+    open(spot, { kind: "results" }, species);
     return true;
   };
   const replace = (spot: SavedBirdSpot) => setCollection(previous => previous.kind === "ready"
@@ -79,9 +101,9 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
     catch (error) { setActionError(messageFor(error)); return false; }
     finally { locks.current.delete(locId); setPending(new Set(locks.current)); }
   };
-  const saved = (locId: string) => collection.kind === "ready" ? collection.spots.find(item => item.locId === locId) : undefined;
-  const toggle = (spot: BirdSpot) => act(spot.locId, async () => {
-    if (saved(spot.locId)) {
+  const saved = (locId: string) => collectionRef.current.kind === "ready" ? collectionRef.current.spots.find(item => item.locId === locId) : undefined;
+  const toggle = (spot: BirdSpot, remove = Boolean(saved(spot.locId))) => act(spot.locId, async () => {
+    if (remove) {
       const removed = await store.remove(spot.locId);
       setCollection(previous => previous.kind === "ready" ? { kind: "ready", spots: previous.spots.filter(item => item.locId !== spot.locId) } : previous);
       setUndo(removed); setNotice("已取消收藏");
@@ -95,12 +117,15 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
   const restore = async () => {
     if (!undo) return;
     const removed = undo;
-    await act(removed.locId, async () => { replace(await store.restore(removed)); setUndo(null); setNotice("已復原收藏"); });
+    await act(removed.locId, async () => { replace(await store.restore(removed)); setUndo(current => current === removed ? null : current); setNotice("已復原收藏"); });
   };
   const saveNote = (spot: BirdSpot, note: string) => act(spot.locId, async () => {
-    replace(await store.save(spot));
-    replace(await store.update(spot.locId, { note }));
+    replace(await store.saveNote(spot, note));
     setNotice("已儲存筆記");
+  });
+  const update = (locId: string, fields: Partial<SpotFields>) => act(locId, async () => {
+    replace(await store.update(locId, fields));
+    setNotice("已儲存收藏");
   });
   const rows = view.kind === "detail" && recent.kind === "ready" ? recent.response.observations : [];
   const coordinates = rows.find(row => row.lat !== null && row.lng !== null);
@@ -113,6 +138,6 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
   } : null;
   return { view, collection, recent, detailSpot, days, setDays: (value: number) => { if (value !== days) { invalidate(); setDays(value); } }, onlySpecies, setOnlySpecies, pending, saved,
     available: collection.kind === "ready", actionError, notice, undo, restore, toggle, toggleObservation,
-    saveNote, loadCollection, dismissError: () => setActionError(""), close, openObservation, refresh: () => { invalidate(); setRevision(value => value + 1); } };
+    saveNote, update, loadCollection, dismissError: () => setActionError(""), navigate, resumeView, open, openObservation, refresh: () => { invalidate(); setRevision(value => value + 1); } };
 }
 export type SearchBirdSpots = ReturnType<typeof useSearchBirdSpots>;

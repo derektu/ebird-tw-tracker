@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Search App 選單設計原型</title>
+    <style>
+      :root {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #243b30;
+        background: #f5f7f1;
+        font-size: 15px;
+        --green: #296442;
+        --line: #dce4d8;
+        --muted: #748174;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+        color: inherit;
+      }
+      button,
+      a,
+      input,
+      select {
+        min-height: 44px;
+      }
+      button {
+        border: 0;
+        background: transparent;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-weight: 600;
+      }
+      button:hover {
+        background: #eef2e9;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #b4934c;
+        outline-offset: 2px;
+      }
+      button.primary {
+        background: var(--green);
+        color: #fff;
+      }
+      button.soft {
+        background: #edf3e8;
+        color: var(--green);
+      }
+      button.icon {
+        min-width: 44px;
+        padding: 10px;
+        font-size: 21px;
+      }
+      button.danger {
+        color: #a14335;
+        background: #fff1ec;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .app {
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #f8faf5;
+      }
+      .toolbar {
+        height: 60px;
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        z-index: 5;
+      }
+      .context {
+        flex: 1;
+        min-width: 0;
+        font-weight: 700;
+        font-size: 17px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .context small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+        margin-top: 2px;
+      }
+      .titlepicker {
+        text-align: left;
+        line-height: 1.1;
+        flex: 1;
+        min-width: 0;
+        padding: 4px 8px;
+      }
+      .titlepicker span {
+        display: block;
+        font-size: 16px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .titlepicker small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 4px;
+      }
+      .brand,
+      .wide-nav,
+      .wide-only {
+        display: none;
+      }
+      .workspace {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .map {
+        position: absolute;
+        inset: 0;
+        background: #eaf0e5;
+        overflow: hidden;
+      }
+      .map svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .map-label {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        font-size: 10px;
+        color: #748174;
+        background: #ffffffc9;
+        border-radius: 6px;
+        padding: 4px 7px;
+      }
+      .zoom {
+        position: absolute;
+        right: 12px;
+        top: 14px;
+        display: grid;
+        gap: 1px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 3px 12px #293f3020;
+      }
+      .zoom button {
+        font-size: 22px;
+      }
+      .map-caption {
+        position: absolute;
+        top: 14px;
+        left: 12px;
+        background: #fffef5e8;
+        padding: 8px 12px;
+        border: 1px solid #e2e7d9;
+        border-radius: 10px;
+        font-size: 12px;
+        max-width: calc(100% - 80px);
+      }
+      .pin {
+        position: absolute;
+        background: var(--green);
+        color: white;
+        border: 3px solid white;
+        border-radius: 30px;
+        box-shadow: 0 2px 6px #233b3033;
+        padding: 5px 9px;
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 13px;
+      }
+      .pin.one {
+        left: 38%;
+        top: 26%;
+      }
+      .pin.two {
+        left: 55%;
+        top: 40%;
+      }
+      .pin.three {
+        left: 32%;
+        top: 46%;
+      }
+      .sheet {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 49%;
+        background: #fff;
+        border-radius: 22px 22px 0 0;
+        box-shadow: 0 -4px 24px #2c4a301c;
+        display: flex;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .sheet.full {
+        height: 86%;
+      }
+      .handle {
+        width: 36px;
+        height: 4px;
+        border-radius: 8px;
+        background: #cdd6c7;
+        margin: 8px auto 0;
+        flex-shrink: 0;
+      }
+      .sheet-heading {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 9px 16px;
+        border-bottom: 1px solid #edf0e9;
+      }
+      .sheet-heading h2 {
+        font-size: 17px;
+        margin: 0;
+        flex: 1;
+      }
+      .list {
+        overflow: auto;
+        flex: 1;
+        padding: 0 16px;
+      }
+      .result {
+        padding: 15px 0;
+        border-bottom: 1px solid #e8ede4;
+      }
+      .result h3 {
+        font-size: 16px;
+        margin: 0 0 7px;
+      }
+      .result p {
+        font-size: 13px;
+        margin: 6px 0;
+        color: #647567;
+      }
+      .result .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .badge {
+        background: #eef4e8;
+        border-radius: 6px;
+        padding: 3px 6px;
+        font-size: 11px;
+        color: #417148;
+      }
+      .empty {
+        padding: 24px 20px;
+        text-align: center;
+      }
+      .empty h2 {
+        font-size: 19px;
+        margin: 4px 0 10px;
+      }
+      .empty p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #6c7b6c;
+        margin: 0 0 18px;
+      }
+      .backdrop {
+        position: absolute;
+        inset: 0;
+        background: #21362b42;
+        z-index: 10;
+      }
+      .menu {
+        position: absolute;
+        top: 7px;
+        left: 10px;
+        right: 10px;
+        max-width: 340px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 10px;
+        box-shadow: 0 12px 40px #163c2e33;
+        z-index: 11;
+      }
+      .menu-caption {
+        font-size: 11px;
+        color: #7d8779;
+        padding: 8px 12px;
+        letter-spacing: 1px;
+      }
+      .menu button {
+        width: 100%;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        text-align: left;
+        min-height: 56px;
+      }
+      .menu button.active {
+        color: var(--green);
+        background: #edf4e8;
+      }
+      .menu button span:last-child {
+        margin-left: auto;
+        font-size: 13px;
+      }
+      .menu hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 8px;
+      }
+      .form-sheet {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border-radius: 22px 22px 0 0;
+        padding: 0 20px 24px;
+        z-index: 11;
+        max-height: calc(100% - 12px);
+        overflow: auto;
+      }
+      .form-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 7px 0 12px;
+      }
+      .form-head h2 {
+        font-size: 19px;
+        margin: 0;
+      }
+      .fields {
+        display: grid;
+        gap: 16px;
+      }
+      .field {
+        display: grid;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .field input,
+      .field select,
+      .field textarea,
+      .list-tools input,
+      .list-tools select {
+        width: 100%;
+        min-width: 0;
+        background: #fafcf8;
+        border: 1px solid #d2ddce;
+        border-radius: 10px;
+        padding: 11px 12px;
+        color: #293d2f;
+        outline-color: var(--green);
+      }
+      .field textarea {
+        min-height: 112px;
+        resize: vertical;
+      }
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 22px;
+      }
+      .form-actions button {
+        flex: 1;
+      }
+      .inline-form {
+        padding: 14px 16px 16px;
+        border-bottom: 1px solid var(--line);
+        background: white;
+        z-index: 4;
+        max-height: 60dvh;
+        overflow: auto;
+      }
+      .inline-form .form-head {
+        margin-top: 0;
+      }
+      .inline-form .fields {
+        grid-template-columns: 1.4fr 1fr;
+        gap: 10px;
+      }
+      .inline-form .form-actions {
+        margin-top: 12px;
+      }
+      .page {
+        height: 100%;
+        background: #f6f8f1;
+        overflow: auto;
+        padding: 18px 16px 30px;
+      }
+      .page-inner {
+        max-width: 620px;
+        margin: auto;
+      }
+      .page-intro {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: #768270;
+      }
+      .list-tools {
+        display: grid;
+        grid-template-columns: 1fr 112px;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .card {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        margin: 12px 0;
+        padding: 18px;
+      }
+      .card h2 {
+        font-size: 16px;
+        margin: 0 0 12px;
+      }
+      .card p {
+        font-size: 14px;
+        line-height: 1.7;
+        margin: 8px 0;
+        color: #65735f;
+      }
+      .saved-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .saved-card .open-saved {
+        text-align: left;
+        display: block;
+        width: 100%;
+        padding: 18px;
+        min-height: 100px;
+      }
+      .saved-card h2 {
+        margin: 0 0 8px;
+      }
+      .saved-card p {
+        margin: 5px 0;
+        font-size: 13px;
+      }
+      .saved-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid #edf0e8;
+        padding: 4px 10px;
+      }
+      .saved-actions span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #39704b;
+        font-size: 12px;
+        background: #edf4e8;
+        border-radius: 20px;
+        padding: 5px 10px;
+      }
+      .status.off {
+        background: #f9ede5;
+        color: #965a37;
+      }
+      .editor-actions {
+        position: sticky;
+        bottom: -30px;
+        background: #f6f8f1;
+        padding: 16px 0 22px;
+        display: flex;
+        gap: 8px;
+      }
+      .editor-actions button {
+        flex: 1;
+      }
+      .toast {
+        position: absolute;
+        z-index: 20;
+        left: 16px;
+        right: 16px;
+        bottom: 18px;
+        padding: 14px;
+        background: #263f30;
+        color: #fff;
+        border-radius: 12px;
+        text-align: center;
+        font-size: 13px;
+      }
+      .compare {
+        position: fixed;
+        z-index: 50;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #253343;
+        color: white;
+        border: 1px solid #ffffff55;
+        border-radius: 16px;
+        box-shadow: 0 3px 20px #0003;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 7px;
+        max-width: calc(100vw - 16px);
+        font-size: 11px;
+      }
+      .compare button {
+        color: white;
+        min-width: 36px;
+        padding: 4px 8px;
+      }
+      .compare button:hover {
+        background: #ffffff20;
+      }
+      .compare strong {
+        display: block;
+        font-size: 12px;
+      }
+      .compare small {
+        display: block;
+        color: #d1dae5;
+        font-size: 10px;
+        margin-top: 2px;
+      }
+      .prototype-space {
+        height: 76px;
+        min-height: 76px;
+        background: #edf0f3;
+      }
+      .clean .prototype-space,
+      .clean .compare {
+        display: none;
+      }
+      .result-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .result-actions button {
+        font-size: 12px;
+        flex: 1;
+      }
+      .show-results {
+        position: absolute;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        background: #fff;
+        box-shadow: 0 2px 14px #0002;
+        z-index: 3;
+      }
+      .modal-card {
+        position: absolute;
+        z-index: 12;
+        left: 16px;
+        right: 16px;
+        top: 28%;
+        max-width: 420px;
+        margin: auto;
+        border-radius: 20px;
+        background: #fff;
+        padding: 24px;
+        box-shadow: 0 20px 60px #0003;
+      }
+      .modal-card h2 {
+        font-size: 19px;
+        margin: 0 0 12px;
+      }
+      .modal-card p {
+        font-size: 14px;
+        line-height: 1.7;
+        color: #65735f;
+      }
+      .modal-card .form-actions {
+        flex-direction: column;
+      }
+      .hidden {
+        display: none !important;
+      }
+      @media (min-width: 900px) {
+        .toolbar {
+          height: 64px;
+          min-height: 64px;
+          padding: 8px 24px;
+          gap: 20px;
+        }
+        .brand {
+          display: block;
+          font-size: 18px;
+          font-weight: 750;
+          white-space: nowrap;
+        }
+        .brand em {
+          font-style: normal;
+          color: #6e8067;
+          font-size: 12px;
+          font-weight: 400;
+          margin-left: 8px;
+        }
+        .wide-nav {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+        }
+        .wide-nav button.active {
+          background: #eaf2e4;
+          color: var(--green);
+        }
+        .mobile-only {
+          display: none !important;
+        }
+        .wide-only {
+          display: block;
+        }
+        .toolbar.child .brand,
+        .toolbar.child .wide-nav,
+        .toolbar.child .wide-only {
+          display: none;
+        }
+        .toolbar.child > .context {
+          display: block;
+        }
+        .toolbar.child .mobile-only {
+          display: block !important;
+        }
+        .context {
+          font-size: 16px;
+        }
+        .toolbar > .context {
+          display: none;
+        }
+        .sheet {
+          left: auto;
+          width: 380px;
+          height: 100%;
+          border-radius: 0;
+          box-shadow: -2px 0 18px #2c4a3012;
+          border-left: 1px solid var(--line);
+        }
+        .sheet.full {
+          height: 100%;
+        }
+        .sheet .handle {
+          display: none;
+        }
+        .sheet-heading {
+          min-height: 65px;
+        }
+        .workspace:has(.sheet) .map {
+          right: 380px;
+        }
+        .map-caption {
+          top: 20px;
+          left: 24px;
+        }
+        .map-label {
+          left: 24px;
+        }
+        .sheet .empty {
+          padding-top: 40px;
+        }
+        .menu {
+          left: 24px;
+        }
+        .form-sheet {
+          position: relative;
+          border-radius: 0;
+          max-height: none;
+          padding: 14px 24px;
+          border-bottom: 1px solid var(--line);
+          z-index: 4;
+          overflow: visible;
+        }
+        .form-sheet > .handle,
+        .form-sheet > .form-head,
+        .inline-form > .form-head {
+          display: none;
+        }
+        .form-sheet .fields,
+        .inline-form .fields {
+          display: flex;
+          gap: 12px;
+          align-items: end;
+        }
+        .form-sheet .field,
+        .inline-form .field {
+          width: 220px;
+        }
+        .form-sheet form,
+        .inline-form form {
+          display: flex;
+          gap: 14px;
+          align-items: end;
+        }
+        .form-sheet .form-actions,
+        .inline-form .form-actions {
+          margin: 0;
+          min-width: 200px;
+        }
+        .form-sheet .form-actions button,
+        .inline-form .form-actions button {
+          min-width: 94px;
+        }
+        .form-backdrop {
+          display: none;
+        }
+        .inline-form {
+          padding: 14px 24px;
+        }
+        .page {
+          padding: 28px;
+        }
+        .page-inner {
+          max-width: 680px;
+        }
+        .editor-actions {
+          bottom: -30px;
+        }
+        .compare {
+          bottom: 12px;
+        }
+        .prototype-space {
+          height: 70px;
+          min-height: 70px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let isWide = innerWidth >= 900;
+      let variant = params.get("variant") === "B" ? "B" : "A";
+      const clean = params.get("clean") === "1";
+      let route = params.get("state") || "home";
+      let mode = route === "spot-form" ? "spot" : "species";
+      let hasResults = ["results"].includes(route);
+      let menuOpen = route === "menu";
+      let formOpen = ["species-form", "spot-form"].includes(route);
+      let page = ["saved", "editor", "settings"].includes(route)
+        ? route
+        : "map";
+      let origin = "map";
+      let selected = false,
+        detailSaved = false,
+        expanded = false,
+        collapsed = false,
+        keySet = true,
+        dialog = "",
+        toast = "";
+      let conditions = {
+        species: { query: "小天鵝", days: "3" },
+        spot: { query: "關渡自然公園" },
+      };
+      let resultsByMode = { species: hasResults, spot: false };
+      let draft = {};
+      let savedPlaces = [
+        {
+          id: 0,
+          name: "關渡自然公園",
+          location: "台北市北投區",
+          note: "冬季水鳥，早上光線比較好。",
+          pinned: true,
+          date: "今天",
+        },
+        {
+          id: 1,
+          name: "鰲鼓濕地",
+          location: "嘉義縣東石鄉",
+          note: "下次帶望遠鏡，走北側木棧道。",
+          pinned: false,
+          date: "11 月 10 日",
+        },
+      ];
+      let selectedSaved = 0;
+      let editDraft = { name: savedPlaces[0].name, note: savedPlaces[0].note };
+      let editDirty = false;
+      let savedFilter = "";
+      let savedSort = "pinned";
+      const birds = [
+        ["關渡自然公園", "台北市北投區", "今天 07:42", "3"],
+        ["鰲鼓濕地", "嘉義縣東石鄉", "昨天 16:20", "5"],
+        ["宜蘭河口", "宜蘭縣壯圍鄉", "11 月 11 日 08:15", "2"],
+      ];
+      if (formOpen) draft = { ...conditions[mode] };
+      const icon = {
+        menu: "☰",
+        species: "♧",
+        spot: "⌖",
+        saved: "☆",
+        settings: "⚙",
+      };
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      const modeName = () => (mode === "species" ? "鳥種搜尋" : "鳥點搜尋");
+      const queryTitle = () =>
+        hasResults
+          ? mode === "species"
+            ? `${conditions[mode].query} · 近 ${conditions[mode].days} 天`
+            : conditions[mode].query
+          : modeName();
+      function header() {
+        const child = ["editor", "settings"].includes(page);
+        const title =
+          page === "saved"
+            ? "我的鳥點"
+            : page === "editor"
+              ? "編輯收藏"
+              : page === "settings"
+                ? "設定與說明"
+                : detailSaved ? savedPlaces.find(x=>x.id===selectedSaved)?.name : queryTitle();
+        return `<header class="toolbar ${child ? "child" : ""}"><div class="brand">eBird Taiwan Search</div><nav class="wide-nav" aria-label="主要功能">${["species", "spot", "saved"].map((x) => `<button data-action="dest" data-mode="${x}" class="${(page === "saved" ? x === "saved" : page === "map" && mode === x) ? "active" : ""}">${x === "species" ? "搜尋鳥種" : x === "spot" ? "搜尋鳥點" : "我的鳥點"}</button>`).join("")}<button data-action="settings">設定與說明</button></nav>${child ? `<button class="icon mobile-only" data-action="back" aria-label="返回">←</button><div class="context">${title}</div>` : variant === "A" ? `<button class="icon mobile-only" data-action="menu" aria-label="開啟主選單">☰</button><div class="context">${title}</div>` : `<button class="titlepicker mobile-only" data-action="menu" aria-label="切換功能"><span>${page === "saved" ? "我的鳥點" : detailSaved ? esc(savedPlaces.find(x=>x.id===selectedSaved)?.name||'鳥點') : modeName()} ⌄</span>${hasResults && page === "map" && !detailSaved ? `<small>${esc(queryTitle())}</small>` : ""}</button><button class="icon mobile-only" data-action="settings" aria-label="設定與說明">⚙</button>`}${page === "map" && detailSaved ? `<button class="soft" data-action="saved-back">我的鳥點</button>` : page === "map" ? `<button class="soft" data-action="form">${hasResults ? "修改" : "搜尋"}</button>` : page === "saved" ? `<button class="soft" data-action="map">地圖</button>` : `<button class="soft wide-only" data-action="back">返回</button>`}</header>`;
+      }
+      function map() {
+        return `<div class="map"><svg viewBox="0 0 500 700" preserveAspectRatio="xMidYMid meet" aria-label="台灣示意地圖"><defs><pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse"><path d="M 70 0 L 0 0 0 70" fill="none" stroke="#dfe7d9" stroke-width="1"/></pattern></defs><rect width="500" height="700" fill="#e8efe4"/><rect width="500" height="700" fill="url(#grid)"/><path d="M -40 570 C 70 470,110 390,178 314 S 274 150,418 -25 L 560 -25 L 560 740 L-40 740Z" fill="#d4e4d0"/><path d="M282 52C300 47 319 70 312 107C308 143 288 162 277 205C258 265 251 333 220 385C196 429 172 480 138 504C119 512 120 486 126 458C135 413 151 371 159 334C173 275 203 228 213 185C225 142 252 78 282 52Z" fill="#f7f7e9" stroke="#c5d4b7" stroke-width="2"/><path d="M279 83C275 155 239 198 227 258S193 367 154 459" fill="none" stroke="#d7e0bc" stroke-width="16"/><path d="M280 84C263 170 216 235 198 321S159 424 144 466" fill="none" stroke="#e6cfa0" stroke-width="3"/><path d="M260 126C238 161 221 175 215 205M221 276C205 299 194 319 185 344M185 368L170 402" fill="none" stroke="#fff" stroke-width="5"/><g font-family="sans-serif" font-size="12" fill="#809076"><text x="301" y="104">台北</text><text x="268" y="240">台中</text><text x="220" y="378">嘉義</text><text x="157" y="478">高雄</text><text x="315" y="291">花蓮</text></g></svg><div class="map-caption ${hasResults?'':'hidden'}">${hasResults ? (mode === "species" ? "近 " + conditions[mode].days + " 天 · 示範搜尋結果" : "鳥點名稱搜尋 · 示範結果") : ""}</div><div class="zoom"><button aria-label="放大示意地圖" data-action="zoom">＋</button><button aria-label="縮小示意地圖" data-action="zoom">−</button></div>${hasResults || detailSaved ? `<button class="pin one" data-action="pin" aria-label="${detailSaved?esc(savedPlaces.find(x=>x.id===selectedSaved)?.name||'鳥點'):'關渡自然公園示範紀錄'}">${mode==='species'&&!detailSaved?'3':'⌖'}</button>${mode === "species" && !detailSaved ? `<button class="pin two" data-action="pin" aria-label="宜蘭河口示範紀錄">2</button><button class="pin three" data-action="pin" aria-label="鰲鼓濕地示範紀錄">5</button>` : ""}` : ""}<div class="map-label">示意地圖 · 位置與紀錄皆為設計示範</div></div>`;
+      }
+      function results() {
+        if (!hasResults && !detailSaved) return "";
+        if (collapsed)
+          return `<button class="show-results" data-action="collapse">顯示 ${mode === "spot" ? 1 : 3} 筆結果 ↑</button>`;
+        return `<section class="sheet ${expanded ? "full" : ""}" aria-label="${detailSaved ? "收藏鳥點詳情" : "搜尋結果"}"><div class="handle"></div><div class="sheet-heading"><h2>${detailSaved ? esc(savedPlaces.find((x) => x.id === selectedSaved)?.name || "鳥點") : mode === "species" ? "鳥種紀錄" : "鳥點搜尋結果"}</h2>${hasResults && !detailSaved ? `<span class="muted">${mode === "spot" ? 1 : 3} 筆示範</span>` : ""}<button class="icon" data-action="expand" aria-label="${expanded ? "還原半屏清單" : "展開清單"}">${expanded ? "⌄" : "⌃"}</button>${hasResults ? '<button class="icon" data-action="collapse" aria-label="收起結果清單">−</button>' : ""}</div><div class="list">${detailSaved ? `<div class="result"><span class="badge">我的鳥點</span><h3 style="margin-top:14px">${esc(savedPlaces.find((x) => x.id === selectedSaved)?.name || "鳥點")}</h3><p>${savedPlaces.find((x) => x.id === selectedSaved)?.location}</p><p>${esc(savedPlaces.find((x) => x.id === selectedSaved)?.note || "")}</p><div class="result-actions"><button class="soft" data-action="saved-back">← 返回我的鳥點</button><button class="primary" data-action="edit">編輯收藏</button></div></div>` : hasResults && mode === "spot" ? `<article class="result"><span class="badge">公共熱點 · 已收藏</span><h3 style="margin-top:12px">關渡自然公園</h3><p>台北市北投區</p><p>鳥點名稱搜尋示範</p><button class="soft" data-action="saved-detail" data-id="0">查看鳥點</button></article>` : hasResults ? birds.map((b, i) => `<article class="result"><div class="row"><h3>${b[0]}</h3><button class="icon" data-action="favorite" aria-label="${i === 0 ? "已收藏" : "收藏" + b[0]}">${i === 0 ? "★" : "☆"}</button></div><p>${esc(conditions[mode].query)} · ${b[3]} 隻</p><p>${b[1]} · ${b[2]}</p>${selected && i === 0 ? '<div class="result-actions"><button class="soft" data-action="demo">Checklist ↗</button><button class="soft" data-action="demo">Google Maps ↗</button></div>' : ""}</article>`).join("") : ""}</div></section>`;
+      }
+      function form() {
+        return `<section class="${variant === "A" && !isWide ? "form-sheet" : "inline-form"}" aria-label="搜尋${mode === "species" ? "鳥種" : "鳥點"}表單">${variant === "A" && !isWide ? '<div class="handle"></div>' : ""}<div class="form-head"><h2>搜尋${mode === "species" ? "鳥種" : "鳥點"}</h2><button data-action="cancel-form">取消</button></div><form id="search-form"><div class="fields"><label class="field">${mode === "species" ? "鳥種名稱" : "鳥點名稱"}<input name="query" value="${esc(draft.query)}" placeholder="${mode === "species" ? "輸入鳥種名稱" : "搜尋公共熱點與自己的收藏"}" required></label>${mode === "species" ? `<label class="field">最近天數<input name="days" type="number" min="1" max="30" step="1" value="${esc(draft.days)}" required></label>` : '<p class="muted">公共熱點與自己的收藏</p>'}</div><div class="form-actions"><button type="button" class="soft" data-action="cancel-form">取消</button><button class="primary" type="submit">搜尋</button></div></form></section>`;
+      }
+      function menu() {
+        return `<div class="backdrop" data-action="dismiss"></div><nav class="menu" aria-label="${variant === "A" ? "主選單" : "切換功能"}"><div class="menu-caption">${variant === "A" ? "前往" : "切換功能"}</div>${["species", "spot", "saved"].map((x) => `<button data-action="dest" data-mode="${x}" class="${(page === "saved" ? x === "saved" : x === mode) ? "active" : ""}"><b style="font-size:22px;width:24px">${icon[x]}</b><div>${x === "species" ? "搜尋鳥種" : x === "spot" ? "搜尋鳥點" : "我的鳥點"}${x === "spot" ? '<small class="muted" style="display:block;font-weight:400;margin-top:4px">公共熱點與自己的收藏</small>' : x === "saved" ? '<small class="muted" style="display:block;font-weight:400;margin-top:4px">管理收藏、筆記與釘選</small>' : ""}</div>${(page === "saved" ? x === "saved" : x === mode) ? "<span>目前</span>" : ""}</button>`).join("")}${variant === "A" ? '<hr><button data-action="settings"><b style="font-size:22px;width:24px">⚙</b>設定與說明</button>' : ""}</nav>`;
+      }
+      function saved() {
+        return `<div class="page"><div class="page-inner"><p class="page-intro">留下想再去的地方，和你自己的觀察筆記。</p><div class="list-tools"><input id="saved-search" placeholder="搜尋我的鳥點" value="${esc(savedFilter)}" aria-label="搜尋我的鳥點"><select id="saved-sort" aria-label="收藏排序"><option value="pinned" ${savedSort === "pinned" ? "selected" : ""}>釘選優先</option><option value="recent" ${savedSort === "recent" ? "selected" : ""}>最近收藏</option><option value="name" ${savedSort === "name" ? "selected" : ""}>名稱排序</option></select></div><div id="saved-items">${savedItems()}</div></div></div>`;
+      }
+      function savedItems() {
+        let items = savedPlaces.filter((b) =>
+          (b.name + b.location + b.note).includes(savedFilter),
+        );
+        if (savedSort === "name")
+          items = [...items].sort((a, b) =>
+            a.name.localeCompare(b.name, "zh-Hant"),
+          );
+        if (savedSort === "pinned")
+          items = [...items].sort(
+            (a, b) => Number(b.pinned) - Number(a.pinned),
+          );
+        if (savedSort === "recent")
+          items = [...items].sort((a, b) => b.id - a.id);
+        return items.length
+          ? items
+              .map(
+                (b) =>
+                  `<article class="card saved-card"><button class="open-saved" data-id="${b.id}" data-action="saved-detail"><h2>${b.pinned ? "★" : "☆"} ${esc(b.name)}</h2><p>${b.location}</p><p>${esc(b.note)}</p></button><div class="saved-actions"><span>${b.date} 編輯</span><button data-id="${b.id}" data-action="pin-saved">${b.pinned ? "取消釘選" : "釘選"}</button><button data-id="${b.id}" data-action="edit">編輯</button><button data-id="${b.id}" data-action="remove-saved">移除</button></div></article>`,
+              )
+              .join("")
+          : '<p class="muted">沒有符合的收藏鳥點。</p>';
+      }
+      function settings() {
+        return `<div class="page"><div class="page-inner"><p class="page-intro">管理這個裝置的搜尋連線與本機資料。</p><section class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2 style="margin:0">eBird API key</h2><span class="status ${keySet ? "" : "off"}">● ${keySet ? "已設定" : "已移除 · 示範"}</span></div><p>API key 只保存在這個瀏覽器，用於向 eBird 查詢。</p><p>移除後，下一次搜尋需要重新設定。你的收藏與筆記會保留。</p>${keySet ? '<button class="danger" data-action="remove-key">移除 API key</button>' : '<p class="muted">這是記憶體示範，重新整理即可還原。原型不接收真實 API key。</p>'}</section><section class="card"><h2>收藏與筆記</h2><p>${savedPlaces.length} 個收藏鳥點 · 本機儲存</p><p>收藏與筆記留在這個瀏覽器，不會因移除 API key 而刪除。</p></section><section class="card"><h2>關於 Search App</h2><p>探索鳥種與鳥點，收藏想再訪的地方。</p><p class="muted">目前畫面為設計原型。示範資料不代表真實觀察紀錄，沒有 API 連線或永久儲存。</p></section></div></div>`;
+      }
+      function editor() {
+        return `<div class="page"><div class="page-inner"><p class="page-intro">${esc(savedPlaces.find((x) => x.id === selectedSaved)?.name || "鳥點")} · ${savedPlaces.find((x) => x.id === selectedSaved)?.location}</p><section class="card"><div class="fields"><label class="field">收藏名稱<input id="edit-name" value="${esc(editDraft.name)}"></label><label class="field">我的筆記<textarea id="edit-note" placeholder="記下下次想看的鳥，或適合觀察的位置">${esc(editDraft.note)}</textarea></label></div></section><div class="editor-actions"><button class="soft" data-action="back">取消</button><button class="primary" data-action="save">儲存</button></div></div></div>`;
+      }
+      function render() {
+        document.body.className = clean ? "clean" : "";
+        document.getElementById("root").innerHTML =
+          `<div class="app">${header()}${page === "map" && formOpen && (variant === "B" || isWide) ? form() : ""}<main class="workspace">${page === "map" ? map() + results() : page === "saved" ? saved() : page === "settings" ? settings() : editor()}${menuOpen ? menu() : ""}${page === "map" && formOpen && variant === "A" && !isWide ? '<div class="backdrop form-backdrop" data-action="cancel-form"></div>' + form() : ""}${dialog ? `<div class="backdrop" data-action="close-dialog"></div><div role="dialog" aria-modal="true" class="modal-card"><h2>${dialog === "key" ? "移除 API key？" : "捨棄尚未儲存的變更？"}</h2><p>${dialog === "key" ? "這是記憶體操作示範。收藏鳥點與筆記會保留。" : "你可以繼續編輯，或返回我的鳥點。"}</p><div class="form-actions">${dialog === "dirty" ? '<button class="primary" data-action="save-continue">儲存並繼續</button>' : ""}<button class="${dialog === "key" ? "primary" : "soft"}" data-action="${dialog === "key" ? "confirm-key" : "discard"}">${dialog === "key" ? "移除 API key" : "捨棄變更"}</button><button class="soft" data-action="close-dialog">${dialog === "key" ? "取消" : "繼續編輯"}</button></div></div>` : ""}${toast ? `<div role="status" class="toast">${toast}</div>` : ""}</main><div class="prototype-space"></div></div>${clean ? "" : `<aside class="compare" aria-label="設計原型比較工具"><button data-action="variant" aria-label="上一個方案">←</button><div><strong>設計原型 · ${variant} ${variant === "A" ? "主選單＋浮層" : "標題切換＋行內表單"}</strong><small>僅示範 · ${page} ${formOpen ? "／表單開啟" : ""} · 不儲存資料</small></div><button data-action="variant" aria-label="下一個方案">→</button><button data-action="reset" aria-label="重設設計原型">↺</button></aside>`}`;
+        syncURL();
+      }
+      function syncURL() {
+        let state =
+          page !== "map"
+            ? page
+            : menuOpen
+              ? "menu"
+              : formOpen
+                ? mode + "-form"
+                : hasResults
+                  ? "results"
+                  : "home";
+        let u = new URL(location);
+        u.searchParams.set("variant", variant);
+        u.searchParams.set("state", state);
+        history.replaceState({}, "", u);
+      }
+      function openForm() {
+        draft = { ...conditions[mode] };
+        formOpen = true;
+        menuOpen = false;
+        collapsed = false;
+      }
+      function flash(text) {
+        toast = text;
+        render();
+        setTimeout(() => {
+          toast = "";
+          render();
+        }, 2200);
+      }
+      document.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-action]");
+        if (!b) return;
+        const a = b.dataset.action;
+        if (a === "menu") menuOpen = !menuOpen;
+        if (a === "dismiss") menuOpen = false;
+        if (a === "dest") {
+          menuOpen = false;
+          if (b.dataset.mode === "saved") {
+            page = "saved";
+            formOpen = false;
+            detailSaved = false;
+          } else {
+            mode = b.dataset.mode;
+            page = "map";
+            detailSaved = false;
+            hasResults = resultsByMode[mode];
+            openForm();
+          }
+        }
+        if (a === "form") openForm();
+        if (a === "cancel-form") formOpen = false;
+        if (a === "settings") {
+          origin = page === "editor" ? "saved" : page;
+          page = "settings";
+          menuOpen = false;
+          formOpen = false;
+        }
+        if (a === "back") {
+          if (page === "editor") {
+            if (editDirty) {
+              dialog = "dirty";
+            } else page = "saved";
+          } else {
+            page = origin;
+            detailSaved = false;
+          }
+        }
+        if (a === "map") {
+          page = "map";
+          detailSaved = false;
+        }
+        if (a === "saved-detail") {
+          selectedSaved = Number(b.dataset.id || 0);
+          page = "map";
+          detailSaved = true;
+          collapsed = false;
+        }
+        if (a === "saved-back") {
+          page = "saved";
+          detailSaved = false;
+        }
+        if (a === "edit") {
+          selectedSaved = Number(b.dataset.id || selectedSaved);
+          page = "editor";
+          let item = savedPlaces.find((x) => x.id === selectedSaved);
+          editDraft = { name: item.name, note: item.note };
+          editDirty = false;
+        }
+        if (a === "save" || a === "save-continue") {
+          let item = savedPlaces.find((x) => x.id === selectedSaved);
+          item.note = document.getElementById("edit-note").value;
+          item.name = document.getElementById("edit-name").value;
+          item.date = "今天";
+          editDirty = false;
+          dialog = "";
+          page = "saved";
+          flash("已儲存筆記 · 僅本次原型");
+          return;
+        }
+        if (a === "pin-saved") {
+          let item = savedPlaces.find((x) => x.id === Number(b.dataset.id));
+          item.pinned = !item.pinned;
+        }
+        if (a === "remove-saved") {
+          savedPlaces = savedPlaces.filter(
+            (x) => x.id !== Number(b.dataset.id),
+          );
+        }
+        if (a === "remove-key") dialog = "key";
+        if (a === "confirm-key") {
+          keySet = false;
+          dialog = "";
+        }
+        if (a === "close-dialog") dialog = "";
+        if (a === "discard") {
+          editDirty = false;
+          dialog = "";
+          page = "saved";
+        }
+        if (a === "pin") {
+          selected = true;
+          collapsed = false;
+        }
+        if (a === "collapse") collapsed = !collapsed;
+        if (a === "expand") expanded = !expanded;
+        if (a === "favorite") {
+          flash("收藏操作示範 · 不寫入瀏覽器");
+          return;
+        }
+        if (a === "demo") {
+          flash("外部連結位置示範 · 原型不開啟外部網站");
+          return;
+        }
+        if (a === "zoom") {
+          flash("示意地圖 · 此原型僅比較導覽設計");
+          return;
+        }
+        if (a === "variant") {
+          variant = variant === "A" ? "B" : "A";
+          menuOpen = false;
+        }
+        if (a === "reset") {
+          location.href = "?variant=" + variant + (clean ? "&clean=1" : "");
+          return;
+        }
+        render();
+      });
+      document.addEventListener("input", (e) => {
+        if (e.target.closest("#search-form"))
+          draft[e.target.name] = e.target.value;
+        if (e.target.id === "edit-note" || e.target.id === "edit-name") {
+          editDirty = true;
+          editDraft[e.target.id === "edit-name" ? "name" : "note"] =
+            e.target.value;
+        }
+        if (e.target.id === "saved-search") {
+          savedFilter = e.target.value;
+          document.getElementById("saved-items").innerHTML = savedItems();
+        }
+      });
+      document.addEventListener("change", (e) => {
+        if (e.target.closest("#search-form"))
+          draft[e.target.name] = e.target.value;
+        if (e.target.id === "saved-sort") {
+          savedSort = e.target.value;
+          document.getElementById("saved-items").innerHTML = savedItems();
+        }
+      });
+      document.addEventListener("submit", (e) => {
+        if (e.target.id === "search-form") {
+          e.preventDefault();
+          conditions[mode] = { ...draft };
+          hasResults = true;
+          resultsByMode[mode] = true;
+          formOpen = false;
+          collapsed = false;
+          selected = false;
+          render();
+        }
+      });
+      addEventListener("resize", () => {
+        let wide = innerWidth >= 900;
+        if (wide !== isWide) {
+          isWide = wide;
+          render();
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          if (dialog) dialog = "";
+          else if (menuOpen) menuOpen = false;
+          else if (formOpen) formOpen = false;
+          render();
+        }
+        if (
+          ["ArrowLeft", "ArrowRight"].includes(e.key) &&
+          !e.target.matches("input,textarea,select,[contenteditable]")
+        ) {
+          variant = variant === "A" ? "B" : "A";
+          render();
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>

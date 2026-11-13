@@ -116,16 +116,19 @@ export function SearchSpotManager({ model, editor, view, hidden, onClose, onRece
           {model.collection.kind === "loading" && <p role="status">正在讀取收藏…</p>}
           {model.collection.kind === "ready" && !rows.length && <p>{spots.length ? "沒有符合條件的收藏。" : "尚未收藏鳥點。"}</p>}
           {rows.map(spot => <div className="spot-list-row" key={spot.locId} data-selected={selected === spot.locId}>
-            <button className="spot-row-name" onClick={e => {
-              const opener = e.currentTarget;
-              editor.request("detail", () => {
-                if (view.kind === "saved-list") setSelected(spot.locId);
-                onRecent(spot, view, opener);
-              });
-            }}>
-              <strong>{spot.alias || spot.locName || spot.locId}</strong><small>{spot.pinned && "已釘選 · "}{spot.alias && spot.locName && spot.locName + " · "}{spot.locId}</small>
-            </button>
-            <button className="search-app-secondary" aria-label={`編輯 ${spot.alias || spot.locName || spot.locId}`} onClick={e => edit(spot, e.currentTarget)}>編輯</button>
+            <div className="spot-saved-heading">
+              <button className="spot-row-name" title={spot.alias || spot.locName || spot.locId} onClick={e => {
+                const opener = e.currentTarget;
+                editor.request("detail", () => {
+                  if (view.kind === "saved-list") setSelected(spot.locId);
+                  onRecent(spot, view, opener);
+                });
+              }}><strong>{spot.alias || spot.locName || spot.locId}</strong></button>
+              <button className="spot-icon-button" aria-label={`${spot.pinned ? "取消釘選" : "釘選"} ${spot.alias || spot.locName || spot.locId}`} aria-pressed={spot.pinned} disabled={model.pending.has(spot.locId)} onClick={() => void model.update(spot.locId, { pinned: !spot.pinned })}>{spot.pinned ? "★" : "☆"}</button>
+              <button className="spot-saved-action" aria-label={`編輯 ${spot.alias || spot.locName || spot.locId}`} onClick={e => edit(spot, e.currentTarget)}>編輯</button>
+              <button className="spot-saved-action" aria-label={`移除 ${spot.alias || spot.locName || spot.locId}`} disabled={model.pending.has(spot.locId)} onClick={() => void model.toggle(spot, true)}>移除</button>
+            </div>
+            <small>{spot.alias && spot.locName ? spot.locName + " · " : ""}{spot.locId}</small>
           </div>)}
         </div>
       </section>

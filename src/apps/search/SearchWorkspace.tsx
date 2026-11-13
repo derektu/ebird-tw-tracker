@@ -20,6 +20,7 @@ import { useSpotEditor } from "./useSpotEditor";
 import { SearchSpotManager, SpotLeaveDialog } from "./SearchSpotManager";
 import { SearchSpotResults } from "./SearchSpotResults";
 import { useSpotWorkspaceNavigation } from "./useSpotWorkspaceNavigation";
+import { SearchNavigation, SearchNavigationOverlay, SearchFormPanel, type SearchDestination, type SearchOverlay } from "./SearchNavigation";
 
 const TAIWAN_BOUNDS = L.latLngBounds([21.75, 119.25], [25.45, 122.35]);
 const MAP_LIMITS = L.latLngBounds([20.9, 118.2], [26.4, 123.4]);
@@ -102,7 +103,10 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [searched, setSearched] = useState(false);
   const [sheetState, setSheetState] = useState<SheetState>("half");
-  const [controlsExpanded, setControlsExpanded] = useState(() => !window.matchMedia("(max-width: 720px)").matches);
+  const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 720px)").matches);
+  const [controlsExpanded, setControlsExpanded] = useState(false);
+  const [overlay, setOverlay] = useState<SearchOverlay>({ kind: "none" });
+  const committed = useRef<{ query: string; days: string; selected: Species | null; spotQuery: string }>({ query: "", days: "3", selected: null, spotQuery: "" });
   const [publishedDays, setPublishedDays] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fieldRef = useRef<HTMLLabelElement>(null);
@@ -116,6 +120,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const focusExpandedForm = useRef(false);
   const compactSearchRef = useRef<HTMLButtonElement>(null);
+  const hiddenManagerHeaderRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
     if (controlsExpanded && focusExpandedForm.current) searchInputRef.current?.focus();
@@ -157,6 +162,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
           setComparison(result.comparison ?? null);
           setActiveIndex(result.observations.length ? 0 : -1);
           setPublishedDays(result.days);
+          committed.current = { ...committed.current, query: result.species.comName, days: String(result.days), selected: result.species };
           setSearched(true);
           setSheetState("half");
           setControlsExpanded(false);
@@ -189,7 +195,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   useEffect(() => () => workflow.invalidate(), [workflow]);
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 720px)");
-    const resize = () => { if (!mobile.matches) setSheetState("half"); };
+    const resize = () => { setMobile(mobile.matches); if (!mobile.matches) setSheetState("half"); };
     mobile.addEventListener("change", resize);
     return () => mobile.removeEventListener("change", resize);
   }, []);
@@ -354,6 +360,10 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     };
   }, [showingDetail, detailLat, detailLng, sheetState, controlsExpanded, detailHeadingRef]);
 
+  useEffect(() => {
+    if (directory.result.kind === "ready") committed.current.spotQuery = directory.result.query;
+  }, [directory.result]);
+
   const chooseSpecies = useCallback((chosen: Species) => {
     setSelectedSpecies(chosen);
     setQuery(chosen.comName);
@@ -387,13 +397,52 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
       void workflow.run({ source: "explicit", species: chosen, query: chosen ? undefined : normalizedQuery, days: Number(days) });
     });
   };
-  const chooseMode = (next: typeof mode) => {
-    if (mode === next) return;
+  const cancelForm = () => {
+    workflow.invalidate();
+    directory.cancel();
+    setQuery(committed.current.query);
+    setDays(committed.current.days);
+    setSelectedSpecies(committed.current.selected);
+    directory.setQuery(committed.current.spotQuery);
+    setSuggestions([]);
+    setShowRecent(false);
+    setErrorMessage(null);
+    setControlsExpanded(false);
+    requestAnimationFrame(() => compactSearchRef.current?.focus({ preventScroll: true }));
+  };
+  const openForm = () => {
+    setQuery(committed.current.query);
+    setDays(committed.current.days);
+    setSelectedSpecies(committed.current.selected);
+    directory.setQuery(committed.current.spotQuery);
+    setOverlay({ kind: "none" });
+    focusExpandedForm.current = true;
+    setControlsExpanded(true);
+  };
+  const chooseDestination = (destination: SearchDestination) => {
+    setOverlay({ kind: "none" });
     editor.request("mode", () => {
+      setControlsExpanded(false);
       workflow.invalidate();
-      setMode(next);
+      directory.cancel();
+      setOverlay({ kind: "none" });
+      if (destination === "settings") {
+        setOverlay({ kind: "settings", confirmingRemoval: false });
+        return;
+      }
+      if (destination === "saved") {
+        if (!navigation.managerVisible) navigation.openManager(compactSearchRef.current ?? document.body);
+        return;
+      }
+      if (navigation.manager) navigation.closeManager();
+      setMode(destination);
       setErrorMessage(null);
+      openForm();
     });
+  };
+  const closeOverlay = () => {
+    setOverlay({ kind: "none" });
+    requestAnimationFrame(() => (navigation.managerVisible ? navigation.managerHeader.current : compactSearchRef.current)?.focus({ preventScroll: true }));
   };
   const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
 
@@ -403,49 +452,9 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     ? directory.result.query || "所有鳥點" : null;
   const toggleSheet = () => setSheetState(state => state === "expanded" ? "half" : "expanded");
   const collapse = () => { setSheetState("collapsed"); requestAnimationFrame(() => reopenResultsRef.current?.focus()); };
-  return (<>
-    <main className="search-workspace" inert={editor.leave.kind !== "idle"}>
-      <section
-        className={`search-form-card${!controlsExpanded ? " mobile-search-controls-compact" : ""}`}
-        hidden={Boolean(navigation.manager)}
-        aria-labelledby="search-workspace-title"
-      >
-        {!controlsExpanded && (
-          <div className="mobile-search-toolbar" role="group" aria-label="目前搜尋條件">
-            <span className="mobile-search-species">{nameSummary ?? species?.comName ?? "搜尋條件"}</span>
-            <span className="mobile-search-days">{nameSummary ? "鳥點" : publishedDays == null ? "尚未搜尋" : `最近 ${publishedDays} 天`}</span>
-            <button
-              className="search-app-secondary mobile-edit-search-button"
-              type="button"
-              ref={compactSearchRef}
-              onClick={() => {
-                focusExpandedForm.current = true;
-                setControlsExpanded(true);
-              }}
-            >
-              {species || nameSummary ? "修改搜尋" : "展開搜尋條件"}
-            </button>
-          </div>
-        )}
-        <div className="mobile-form-heading">
-          <p className="search-app-eyebrow">eBird Taiwan Search</p>
-          <button
-            className="mobile-collapse-search-button"
-            type="button"
-            onClick={() => {
-              setControlsExpanded(false);
-              window.requestAnimationFrame(() => compactSearchRef.current?.focus());
-            }}
-          >
-            收合條件
-          </button>
-        </div>
-        <div className="spot-search-nav" role="group" aria-label="搜尋模式">
-          <button type="button" aria-pressed={mode === "species"} onClick={() => chooseMode("species")}>鳥種</button>
-          <button type="button" aria-pressed={mode === "spots"} onClick={() => chooseMode("spots")}>鳥點</button>
-          <button type="button" onClick={e => navigation.openManager(e.currentTarget)}>我的鳥點</button>
-        </div>
-        <h1 id="search-workspace-title">{mode === "species" ? "搜尋台灣鳥種觀察紀錄" : "搜尋鳥點"}</h1>
+  const managerEditing = navigation.managerVisible && navigation.manager?.kind === "saved-edit";
+  const obstructed = editor.leave.kind !== "idle" || (controlsExpanded && mobile) || overlay.kind !== "none";
+  const formPanel = controlsExpanded && <SearchFormPanel inline={!mobile} title={mode === "species" ? "搜尋台灣鳥種觀察紀錄" : "搜尋鳥點"} onCancel={cancelForm}>
         <form className="search-form" onSubmit={submitSearch}>
           {mode === "spots" ? <label className="field species-field"><span>鳥點名稱</span>
             <input ref={searchInputRef} value={directory.query} onChange={event => directory.setQuery(event.target.value)} placeholder="地名、地區、收藏別名或筆記" />
@@ -453,6 +462,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
             <span>鳥種</span>
             <input
               type="text"
+              aria-label="鳥種"
               value={query}
               autoComplete="off"
               placeholder="輸入中文名、英文名或 species code"
@@ -513,10 +523,19 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
             {mode === "species" && busy ? "搜尋中…" : "搜尋"}
           </button>
         </form>
-        <button className="search-app-secondary workspace-forget-key" type="button" onClick={() => editor.request("back", onForgetKey)}>忘記 API key</button>
+        <div className="search-panel-actions"><button type="button" className="search-app-secondary" onClick={cancelForm}>取消</button></div>
         {errorMessage && <p className="api-key-error" role="alert">{errorMessage}</p>}
+    </SearchFormPanel>;
+  return (<>
+    <main className="search-workspace" inert={obstructed}>
+      {!managerEditing && <SearchNavigation
+        title={navigation.managerVisible ? "我的鳥點" : nameSummary ?? species?.comName ?? (mode === "spots" ? "搜尋鳥點" : "搜尋鳥種")}
+        subtitle={navigation.managerVisible ? "" : nameSummary ? "鳥點" : publishedDays == null ? "" : `最近 ${publishedDays} 天`}
+        saved={navigation.managerVisible} formOpen={controlsExpanded} searchRef={navigation.managerVisible ? navigation.managerHeader : compactSearchRef}
+        onMenu={() => { cancelForm(); setOverlay({ kind: "menu" }); }} onDestination={chooseDestination} onSearch={() => editor.request("search", openForm)}
+        onMap={() => navigation.closeManager()} />}
         {!nameSummary && species && (
-          <p className="search-results-summary">
+          <p className="search-results-summary screen-reader-status">
             {species.comName}（{species.speciesCode}）最近 {publishedDays} 天：{observations.length} 筆有座標紀錄
             {comparisonPresentation.compactText && (
               <span className={`comparison-summary ${comparisonPresentation.compactTone}`}>
@@ -528,17 +547,16 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
         {!nameSummary && comparisonPresentation.assistiveStatus && (
           <p className="screen-reader-status" role="status">{comparisonPresentation.assistiveStatus}</p>
         )}
-        {!nameSummary && searched && observations.length === 0 && (
-          <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>
-        )}
-      </section>
+      {!mobile && formPanel}
+      {!navigation.manager && birdSpots.view.kind === "results" && searched && observations.length === 0 && <p className="search-results-empty">這個條件沒有找到有座標的公開紀錄。</p>}
+
 
         {!nameSummary && !navigation.manager && comparisonPresentation.warningText && (
           <p className="search-comparison warning" role="alert">{comparisonPresentation.warningText}</p>
         )}
       <SearchBirdSpotMessages model={birdSpots} />
       {navigation.manager && <SearchSpotManager model={birdSpots} editor={editor} view={navigation.manager} hidden={!navigation.managerVisible}
-        headerRef={navigation.managerHeader} onClose={navigation.closeManager} onRecent={navigation.open} />}
+        headerRef={managerEditing ? navigation.managerHeader : hiddenManagerHeaderRef} onClose={navigation.closeManager} onRecent={navigation.open} />}
       <section hidden={navigation.managerVisible} className="workspace" aria-label="觀察紀錄地圖與列表">
         <div className="map-shell">
           <div ref={mapNodeRef} id="map" aria-label="鳥種觀察位置地圖" />
@@ -657,6 +675,9 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
           onBack={navigation.back} onToggleSheet={toggleSheet} onCollapse={collapse} />
       </section>
     </main>
+    {mobile && formPanel}
+    <SearchNavigationOverlay overlay={overlay} onClose={closeOverlay} onDestination={chooseDestination}
+      onConfirmRemoval={confirmingRemoval => setOverlay({ kind: "settings", confirmingRemoval })} onForgetKey={onForgetKey} />
     <SpotLeaveDialog editor={editor} error={birdSpots.actionError} />
   </>);
 }

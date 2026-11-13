@@ -8,7 +8,11 @@ export function useSpotDirectory() {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<Result>({ kind: "idle" });
   const active = useRef<AbortController | null>(null);
-  const cancel = () => active.current?.abort();
+  const completed = useRef<Result>({ kind: "idle" });
+  const cancel = () => {
+    active.current?.abort();
+    setResult(previous => previous.kind === "loading" ? completed.current : previous);
+  };
   useEffect(() => cancel, []);
   const search = async () => {
     cancel();
@@ -21,7 +25,10 @@ export function useSpotDirectory() {
     } catch {
       directory = { status: "unavailable", updatedAt: null, spots: [] };
     }
-    if (!controller.signal.aborted) setResult({ kind: "ready", directory, query });
+    if (!controller.signal.aborted) {
+      completed.current = { kind: "ready", directory, query };
+      setResult(completed.current);
+    }
   };
   return { query, setQuery, result, search, cancel };
 }

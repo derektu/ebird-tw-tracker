@@ -22,7 +22,7 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
   }, [editing, locId]);
   if (view.kind !== "detail") return null;
   const spot = model.detailSpot || view.spot, favorite = model.saved(spot.locId);
-  const rows = recent.kind === "ready" ? recent.response.observations.filter(o => !model.onlySpecies || o.speciesCode === view.species?.speciesCode) : [];
+  const rows = recent.kind === "ready" ? model.detailObservations.filter(o => !model.onlySpecies || o.speciesCode === view.species?.speciesCode) : [];
   const beginEditing = () => {
     if (!editor) {
       const generation = ++editRevision.current;
@@ -68,10 +68,11 @@ export function BirdSpotPanel({ model }: { model: DesktopBirdSpots }) {
       {recent.kind === "ready" && <p className="bird-spot-meta">{rows.length} 個鳥種 · 更新於 {new Date(recent.response.generatedAt).toLocaleString("zh-TW")}</p>}
     </section>
     <div className="bird-spot-scroll">
+      {model.hasOtherLocations && <p className="bird-spot-meta bird-spot-scope">eBird 對此鳥點的查詢回傳了其他地點的紀錄；以下標示實際觀察地點。</p>}
       {recent.kind === "loading" && <p className="empty">正在取得鳥點近期紀錄…</p>}
       {recent.kind === "error" && <div className="bird-spot-error" role="alert"><p>{recent.message}</p><button className="secondary" onClick={model.refresh}>重試查詢</button></div>}
       {recent.kind === "ready" && !rows.length && <div className="empty">最近 {model.days} 天沒有可取得的公開紀錄。這不代表此地沒有鳥；收藏與筆記仍會保留。</div>}
-      {rows.map(o => <article className="bird-spot-observation" key={`${o.speciesCode}:${o.subId}`}><div><strong><a href={`https://ebird.org/species/${encodeURIComponent(o.speciesCode)}`} target="_blank" rel="noreferrer">{o.comName || o.sciName || o.speciesCode} ↗</a></strong><span>{o.howMany === null ? "數量未知" : `${o.howMany} 隻`}</span></div><div className="bird-spot-meta"><span>{o.obsDt}</span><a href={`https://ebird.org/checklist/${encodeURIComponent(o.subId)}`} target="_blank" rel="noreferrer">Checklist ↗</a></div></article>)}
+      {rows.map(o => <article className="bird-spot-observation" key={`${o.speciesCode}:${o.subId}`}><div><strong><a href={`https://ebird.org/species/${encodeURIComponent(o.speciesCode)}`} target="_blank" rel="noreferrer">{o.comName || o.sciName || o.speciesCode} ↗</a></strong><span>{o.howMany === null ? "數量未知" : `${o.howMany} 隻`}</span></div><div className="bird-spot-meta"><span>{o.obsDt}</span><a href={`https://ebird.org/checklist/${encodeURIComponent(o.subId)}`} target="_blank" rel="noreferrer">Checklist ↗</a></div>{model.hasOtherLocations && <p className="bird-spot-meta bird-spot-source">觀察地點：{o.locName || "未提供地名"} · {o.locId}</p>}</article>)}
       <section className="bird-spot-notes"><strong>我的筆記</strong>{editing ? <form onSubmit={e => { e.preventDefault(); saveDraft(); }}><label className="screen-reader-status" htmlFor="bird-spot-note">鳥點筆記</label><textarea id="bird-spot-note" ref={textareaRef} value={editor.value} onChange={e => { const value = e.target.value, generation = ++editRevision.current; setDrafts(previous => { const current = previous[spot.locId]; return current ? { ...previous, [spot.locId]: { ...current, value, generation } } : previous; }); }} /><div className="bird-spot-actions"><button className="primary" disabled={model.pending.has(spot.locId)}>儲存筆記{favorite ? "" : "並收藏"}</button><button type="button" className="secondary" onClick={() => model.requestLeave({ kind: "cancel-edit", run: discard })}>取消編輯</button></div></form> : <p>{favorite?.note || "尚未加入筆記"}</p>}</section>
     </div>
   </aside>;

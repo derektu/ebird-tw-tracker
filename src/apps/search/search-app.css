@@ -829,3 +829,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
   .search-workspace[data-compact-viewport] .spot-editor-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px; gap: 4px; }
   .search-workspace[data-compact-viewport] .spot-editor-actions .spot-remove { grid-column: auto; justify-self: stretch; padding-inline: 0; }
 }
+
+.search-spot-scope, .search-spot-source { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.search-spot-source { grid-column: 1 / -1; margin: 0 0 4px; }

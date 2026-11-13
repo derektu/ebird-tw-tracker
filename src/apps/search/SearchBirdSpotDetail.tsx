@@ -26,7 +26,7 @@ export function SearchBirdSpotDetail({ model, editor, sheetState, onBack, onTogg
   const { view, recent } = model;
   const spot = model.detailSpot, favorite = model.saved(spot.locId);
   const draft = editor.draft?.kind === "note" && editor.draft.spot.locId === spot.locId ? editor.draft : null;
-  const rows = recent.kind === "ready" ? recent.response.observations.filter(row => !model.onlySpecies || row.speciesCode === view.species?.speciesCode) : [];
+  const rows = recent.kind === "ready" ? model.detailObservations.filter(row => !model.onlySpecies || row.speciesCode === view.species?.speciesCode) : [];
   return <aside className="side search-spot-detail" data-sheet-state={sheetState} aria-label="鳥點詳情">
     <header className="search-spot-heading">
       <button ref={headingRef} className="spot-icon-button" aria-label={view.origin.kind.startsWith("saved") ? "返回我的鳥點" : "返回搜尋結果"} onClick={onBack}>←</button>
@@ -46,12 +46,14 @@ export function SearchBirdSpotDetail({ model, editor, sheetState, onBack, onTogg
     </form>
     <p className="search-spot-hint">各鳥種最新一筆{recent.kind === "ready" && ` · ${new Date(recent.response.generatedAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })} 更新`}</p>
     <div className="search-spot-scroll" ref={listRef}>
+      {model.hasOtherLocations && <p className="search-spot-scope">eBird 對此鳥點的查詢回傳了其他地點的紀錄；以下標示實際觀察地點。</p>}
       {recent.kind === "loading" && <p role="status">正在取得鳥點近期紀錄…</p>}
       {recent.kind === "error" && <div role="alert"><p>{recent.message}</p><button className="search-app-secondary" onClick={refresh}>重試查詢</button></div>}
       {recent.kind === "ready" && !rows.length && <p>最近 {model.days} 天沒有可取得的公開紀錄。這不代表此地沒有鳥；收藏與筆記仍會保留。</p>}
       {rows.map(row => <article className="search-spot-row" key={`${row.speciesCode}:${row.subId}`}>
         <a className="search-spot-species-link" href={`https://ebird.org/species/${encodeURIComponent(row.speciesCode)}`} target="_blank" rel="noreferrer"><strong>{row.comName || row.sciName || row.speciesCode} ↗</strong><span>{row.obsDt}</span></a>
         <a className="search-spot-checklist-link" href={`https://ebird.org/checklist/${encodeURIComponent(row.subId)}`} target="_blank" rel="noreferrer"><span>{row.howMany === null ? "數量未知" : `${row.howMany} 隻`}</span><span>Checklist ↗</span></a>
+        {model.hasOtherLocations && <p className="search-spot-source">觀察地點：{row.locName || "未提供地名"} · {row.locId}</p>}
       </article>)}
       <section className="search-spot-notes"><strong>我的筆記</strong>
         {draft ? <form onSubmit={event => { event.preventDefault(); void editor.submit(() => {}); }}>

@@ -1,3 +1,4 @@
+import { openSearch } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const apiKey = "browser-owned-key";
@@ -32,8 +33,7 @@ async function signIn(page) {
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
   await expect(page.locator(".search-workspace")).toBeVisible();
-  const expand = page.getByRole("button", { name: "展開搜尋條件" });
-  if (await expand.isVisible()) await expand.click();
+  await openSearch(page);
   await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
 }
 
@@ -51,8 +51,9 @@ async function stubSearches(page, responses) {
 }
 
 async function search(page) {
+  await openSearch(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
 }
 
 async function failIndexedDbOpen(page, callNumber) {
@@ -126,6 +127,7 @@ test("two browser Search Scopes retain independent IndexedDB baselines", async (
   await search(page);
   await expect(page.getByRole("status")).toHaveText("已建立搜尋比較基準");
   expect(await readIndexedDbSnapshot(page, "grpsni1:3")).toMatchObject({ identityIds: ["grpsni1:S1"] });
+  await openSearch(page);
   await page.locator('input[type="number"]').fill("7");
   await search(page);
   await expect.poll(() => readIndexedDbSnapshot(page, "grpsni1:7")).toMatchObject({ identityIds: ["grpsni1:S7"] });
@@ -237,9 +239,12 @@ for (const scenario of comparisonWarningCases) {
   test(`Search App displays ${scenario.name}`, async ({ page }) => {
     if (scenario.failureAt) await failIndexedDbOpen(page, scenario.failureAt);
     await signIn(page);
+    const searchCount = scenario.responses.length;
     await stubSearches(page, scenario.responses);
-    await search(page);
-    if (scenario.responses.length) await search(page);
+    for (let index = 0; index < searchCount; index++) {
+      await search(page);
+      await expect(page.locator(".search-form")).toHaveCount(0);
+    }
     if (scenario.compactText) {
       await expect(page.locator(".search-results-summary")).toContainText(scenario.compactText);
       if (!scenario.warningText) await expect(page.locator(".search-comparison")).toHaveCount(0);

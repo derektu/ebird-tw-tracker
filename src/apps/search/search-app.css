@@ -832,3 +832,65 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
 
 .search-spot-scope, .search-spot-source { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .search-spot-source { grid-column: 1 / -1; margin: 0 0 4px; }
+
+/* Search App navigation keeps the map mounted behind transient panels. */
+.search-workspace { position: relative; gap: 12px; }
+.search-navigation { display: flex; align-items: center; gap: 8px; min-height: 60px; padding: 8px 12px; }
+.search-navigation-context { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.search-navigation-context strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-navigation-context small { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+.search-navigation-brand { font-size: 14px; font-weight: 700; color: var(--active); }
+.search-wide-navigation { display: flex; gap: 4px; }
+.search-wide-navigation button { border: 0; background: transparent; color: var(--active); min-height: 44px; padding: 0 10px; cursor: pointer; }
+.search-menu-toggle { display: none; }
+.search-navigation-overlay, .search-form-overlay { position: fixed; inset: 0; z-index: 2200; padding: 24px; display: flex; align-items: flex-start; justify-content: center; background: rgb(18 32 25 / 35%); overflow-y: auto; }
+.search-navigation-overlay .bird-spots-dialog, .search-form-overlay .bird-spots-dialog { width: min(100%, 720px); max-height: 100%; overflow-y: auto; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
+.search-panel-heading { display: flex; align-items: center; gap: 8px; }
+.search-panel-heading h1 { flex: 1; margin: 0; font-size: 20px; }
+.search-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.search-menu-overlay nav { display: grid; margin-top: 12px; }
+.search-menu-overlay nav button { display: grid; gap: 4px; min-height: 64px; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 12px; color: var(--active); cursor: pointer; }
+.search-menu-overlay nav small { color: var(--muted); }
+.search-settings-content section { margin-top: 20px; }
+.search-settings-content h2 { margin: 0; font-size: 17px; }
+.search-settings-content p { color: var(--muted); line-height: 1.6; }
+.spot-manager[data-editing="false"] .spot-manager-heading { display: none; }
+.spot-manager-panes { display: flex; }
+.spot-manager-list, .spot-manager-editor { flex: 1; }
+.spot-manager[data-editing="true"] .spot-manager-list, .spot-manager[data-editing="false"] .spot-manager-editor { display: none; }
+.spot-manager[data-editing="true"] .spot-manager-heading > button:first-child, .spot-manager[data-editing="true"] h1 span:first-child { display: none; }
+.spot-mobile-list-back, .spot-edit-title { display: inline-block; }
+.spot-manager .spot-list-row { display: block; padding: 6px 10px; }
+.spot-saved-heading { display: flex; align-items: center; gap: 0; min-width: 0; }
+.spot-manager .spot-row-name { display: block; min-height: 44px; padding: 4px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.spot-manager .spot-row-name strong { font-size: 14px; }
+.spot-saved-action { flex: 0 0 44px; min-width: 44px; min-height: 44px; padding: 0; background: transparent; border: 0; color: var(--active); font-size: 14px; cursor: pointer; }
+.spot-manager .spot-list-row > small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .search-navigation-brand { display: none; }
+  .search-wide-navigation button { padding-inline: 6px; }
+}
+@media (max-width: 720px) {
+  .search-navigation { min-height: 60px; padding: 4px 6px; }
+  .search-menu-toggle { display: block; }
+  .search-wide-navigation { display: none; }
+  .search-navigation-context { gap: 4px; }
+  .search-navigation-context strong { font-size: 14px; }
+  .search-navigation-context small { font-size: 12px; }
+  .search-navigation .mobile-edit-search-button { font-size: 13px; padding-inline: 8px; }
+  .search-navigation-overlay, .search-form-overlay { padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+  .search-form-overlay { align-items: flex-end; }
+  .search-form-overlay .bird-spots-dialog { border-radius: 18px 18px 0 0; padding: 16px; max-height: 100%; }
+  .search-form-overlay .search-form { margin-top: 16px; }
+  .search-form-overlay .search-form .field { width: 100%; }
+  .search-form-overlay .search-form > button { flex: 1; }
+}
+.search-inline-form { padding: 12px 16px; }
+.search-inline-form .search-panel-heading h1 { font-size: 16px; }
+.search-inline-form .search-form { margin-top: 8px; }
+.search-inline-form .search-panel-actions { margin-top: 6px; }
+@media (max-width: 720px) {
+  .search-form-viewport .search-form-overlay { top: var(--form-viewport-top, 0); bottom: auto; height: var(--form-viewport-height, 100dvh); }
+}
+.search-inline-form > .search-panel-actions { display: none; }
+.search-settings-overlay .search-panel-heading > .spot-icon-button { order: -1; }

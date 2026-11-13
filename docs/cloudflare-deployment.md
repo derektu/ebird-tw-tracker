@@ -42,7 +42,7 @@ npm run dev:cloudflare
 2. 搜尋一個鳥種，確認最近觀察、地圖、結果清單、Pin 選取、Checklist 與 Google Maps 連結。
 3. 以相同 Search Scope 再搜尋一次，確認 Search Discovery 摘要和 `新增` 標記；確認 recent species 仍可選取。
 4. 在手機與桌面 viewport 各檢查一次。手機確認 Bottom Sheet 的半屏、展開、收合和「顯示 N 筆結果」重新開啟流程。
-5. 選擇「忘記 API key」，確認只回到 gate；recent species 與 Search Baseline 不會因此清除。
+5. 從主選單進入「設定與說明」，選擇「移除 API key」並確認，確認回到 gate；收藏、筆記、recent species 與 Search Baseline 不會因此清除。
 
 這些手動步驟使用真實 key。不要把 key 放入 shell history、畫面錄影、問題回報或 CI log。
 

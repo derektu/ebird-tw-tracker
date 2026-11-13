@@ -1,3 +1,4 @@
+import { openSearch, chooseDestination, forgetKey } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const now = "2026-11-11T00:00:00.000Z";
@@ -49,19 +50,16 @@ async function setup(page, { width = 390, height = 844, spots = favorites, respo
   await signIn(page);
 }
 async function conditions(page) {
-  const b = page.getByRole("button", { name: /^(展開搜尋條件|修改搜尋)$/ });
-  if (await b.isVisible()) await b.click();
+  await openSearch(page);
 }
 async function openManager(page) {
-  await conditions(page);
-  await button(page, "我的鳥點").click();
+  await chooseDestination(page, "我的鳥點");
   await expect(manager(page)).toBeVisible();
 }
 async function spotSearch(page, query) {
-  await conditions(page);
-  await button(page, "鳥點").click();
+  await chooseDestination(page, "搜尋鳥點");
   await page.getByRole("textbox", { name: "鳥點名稱" }).fill(query);
-  await button(page, "搜尋").click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(names(page)).toBeVisible();
 }
 async function holdNextOpen(page) {
@@ -96,7 +94,7 @@ for (const width of [320, 390, 402, 1440]) {
     await setup(page, { width });
     if (width < 720) {
       await expect(button(page, "我的鳥點")).toBeHidden();
-      expect(await page.locator(".search-form-card").evaluate(n => n.getBoundingClientRect().height)).toBe(70);
+      expect(await page.locator(".search-form-card").evaluate(n => n.getBoundingClientRect().height)).toBe(60);
     }
     await spotSearch(page, "同名");
     await expect(nameRows(page)).toHaveCount(2);
@@ -108,7 +106,7 @@ for (const width of [320, 390, 402, 1440]) {
     await button(detail(page), "返回搜尋結果").press("Enter");
     await expect(opener).toBeFocused();
     await openManager(page);
-    await expect(button(manager(page), "返回工作區")).toBeFocused();
+    await expect(button(page.locator(".search-navigation"), "地圖")).toBeFocused();
     await manager(page).getByRole("combobox", { name: "收藏排序" }).selectOption("name");
     await manager(page).getByRole("searchbox").fill("地點");
     const target = rows(page).nth(20);
@@ -140,9 +138,10 @@ for (const width of [320, 390, 402, 1440]) {
     await button(manager(page), "取消").click();
     await button(dialog(page), "捨棄").click();
     await expect(edit).toBeFocused();
-    await button(manager(page), "返回工作區").click();
-    await expect(button(page, "我的鳥點")).toBeFocused();
+    await button(page.locator(".search-navigation"), "地圖").click();
+    await expect(page.locator(".search-navigation").getByRole("button", { name: "修改搜尋", exact: true })).toBeFocused();
     await expect(names(page)).toHaveAttribute("data-sheet-state", "half");
+    await openSearch(page);
     await expect(page.getByRole("textbox", { name: "鳥點名稱" })).toHaveValue("同名");
   });
 }
@@ -171,25 +170,38 @@ test("a single private directory GET merges local aliases and notes, including w
 
 test("each mode retains its conditions and an obsolete species or directory request cannot replace current results", async ({ page }) => {
   let observation;
+  let speciesRequests = 0;
   const held = [];
-  await setup(page, { response: r => { held.push(r); } });
+  let directoryRequests = 0;
+  await setup(page, { width: 1440, response: r => {
+    if (++directoryRequests === 1) return r.fulfill({ json: { spots: directory, status: "fresh", updatedAt: now } });
+    held.push(r);
+  } });
   await page.route("**/api/species/resolve*", r => r.fulfill({ json: { species: { comName: "彩鷸", speciesCode: "grpsni1", sciName: "Rostratula benghalensis" } } }));
-  await page.route("**/api/observations*", r => { observation = r; });
+  await page.route("**/api/observations*", r => {
+    if (++speciesRequests === 1) return r.fulfill({ json: { speciesCode: "grpsni1", observations: [], days: 9, generatedAt: now } });
+    observation = r;
+  });
   await conditions(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
   await page.getByRole("spinbutton", { name: "最近天數" }).fill("9");
   await expect(page.getByRole("spinbutton", { name: "最近天數" })).toHaveValue("9");
-  await button(page, "搜尋").click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
+  await expect(page.locator(".search-navigation")).toContainText("最近 9 天");
+  await conditions(page);
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect.poll(() => observation && new URL(observation.request().url()).searchParams.get("days")).toBe("9");
+  await spotSearch(page, "地點 11");
+  await expect(names(page).getByRole("status")).toContainText("搜尋範圍為公共熱點與本機收藏");
   await spotSearch(page, "地點 11");
   await expect(nameRows(page)).toContainText("L111");
   await observation.fulfill({ json: { observations: [], days: 9, generatedAt: now } }).catch(() => {});
   await openManager(page);
-  await button(manager(page), "返回工作區").click();
-  await button(page, "鳥種").click();
+  await button(page.locator(".search-navigation"), "地圖").click();
+  await chooseDestination(page, "搜尋鳥種");
   await expect(page.getByRole("spinbutton", { name: "最近天數" })).toHaveValue("9");
   await expect(page.getByPlaceholder("輸入中文名、英文名或 species code")).toHaveValue("彩鷸");
-  await button(page, "鳥點").click();
+  await chooseDestination(page, "搜尋鳥點");
   await expect(page.getByRole("spinbutton", { name: "最近天數" })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "鳥點名稱" })).toHaveValue("地點 11");
   await spotSearch(page, "L129");
@@ -204,24 +216,24 @@ test("each mode retains its conditions and an obsolete species or directory requ
 test("save failure retains its destination and all fields; reloading, sorting and forgetting the key retain metadata", async ({ page }) => {
   await setup(page, { width: 1440 });
   await openManager(page);
-  await button(manager(page), "保存位置說明").click();
-  await expect(manager(page)).toContainText("不會自動同步");
-  await button(manager(page), "保存位置說明").click();
+  await chooseDestination(page, "設定與說明");
+  await expect(dialog(page)).toContainText("不會自動同步");
+  await button(dialog(page), "返回").click();
   await button(manager(page), "編輯 地點 02").click();
   await field(page, "別名").fill("ABC");
   await field(page, "筆記").fill("使用西入口");
   await manager(page).getByRole("checkbox", { name: "釘選" }).check();
   await failNextWrite(page);
-  await button(manager(page), "編輯 地點 03").click();
+  await button(manager(page), "返回收藏清單").click();
   await button(dialog(page), "儲存").click();
   await expect(dialog(page).getByRole("alert")).toContainText("無法讀寫");
   expect((await db(page, "read")).find(s => s.locId === "L102")).toMatchObject({ alias: "地點 02", pinned: false });
   await button(dialog(page), "繼續編輯").click();
   await expect(field(page, "別名")).toHaveValue("ABC");
   await expect(field(page, "筆記")).toHaveValue("使用西入口");
-  await button(manager(page), "編輯 地點 03").click();
+  await button(manager(page), "返回收藏清單").click();
   await button(dialog(page), "儲存").click();
-  await expect(field(page, "別名")).toHaveValue("地點 03");
+  await expect(rows(page)).toHaveCount(30);
   await page.reload();
   await openManager(page);
   await expect(rows(page).first()).toContainText("ABC");
@@ -230,8 +242,8 @@ test("save failure retains its destination and all fields; reloading, sorting an
   await manager(page).getByRole("combobox").selectOption("name");
   const actual = await rows(page).locator("strong").allTextContents();
   expect(actual).toEqual([...actual].sort((a,b) => a.localeCompare(b, "zh-Hant")));
-  await button(manager(page), "返回工作區").click();
-  await button(page, "忘記 API key").click();
+  await button(page.locator(".search-navigation"), "地圖").click();
+  await forgetKey(page);
   await signIn(page);
   await openManager(page);
   await button(manager(page), "編輯 ABC").click();
@@ -254,9 +266,11 @@ test("in-flight commits preserve later typing and never close another or reopene
   expect((await db(page, "read")).find(s => s.locId === "L102").note).toBe("first");
   await holdNextOpen(page);
   await button(manager(page), "儲存").click();
-  await button(manager(page), "編輯 地點 03").click();
+  await button(manager(page), "返回收藏清單").click();
   await button(dialog(page), "捨棄").click();
+  await button(manager(page), "編輯 地點 03").click();
   await expect(field(page, "別名")).toHaveValue("地點 03");
+  await button(manager(page), "返回收藏清單").click();
   await button(manager(page), "編輯 地點 02").click();
   await field(page, "筆記").fill("third");
   await page.waitForFunction(() => typeof window.releaseHeldSave === "function");
@@ -316,7 +330,7 @@ test("the manager fits a shorter visual viewport while the layout viewport stays
   expect((await db(page, "read")).find(s => s.locId === "L102").note).toBe("可用高度");
 });
 
-test("nested manager detail returns to its editor and the previous detail keeps its map, days, scroll and source", async ({ page }) => {
+test("nested manager detail returns to its list and the previous detail keeps its map, days, scroll and source", async ({ page }) => {
   await setup(page, { width: 1440, height: 650 });
   let calls = 0;
   await page.route("**/api/bird-spots/observations*", r => {
@@ -341,16 +355,16 @@ test("nested manager detail returns to its editor and the previous detail keeps 
   await openManager(page);
   await button(manager(page), "編輯 地點 02").click();
   await field(page, "筆記").fill("未保存");
+  await button(manager(page), "返回收藏清單").click();
+  await button(dialog(page), "捨棄").click();
   const other = rows(page).filter({ hasText: "L104" }).locator(".spot-row-name");
   await other.click();
-  await button(dialog(page), "捨棄").click();
   await expect(detail(page).locator(".search-spot-row")).toHaveCount(35);
   await button(detail(page), "返回我的鳥點").click();
-  await expect(field(page, "別名")).toHaveValue("地點 02");
-  await expect(manager(page).locator('.spot-list-row[data-selected="true"]')).toContainText("L102");
+  await expect(manager(page).locator('.spot-list-row[data-selected="true"]')).toContainText("L104");
   await expect(other).toBeFocused();
   const before = calls;
-  await button(manager(page), "返回工作區").click();
+  await button(page.locator(".search-navigation"), "地圖").click();
   await expect(detail(page).getByRole("spinbutton")).toHaveValue("15");
   await expect.poll(() => detail(page).locator(".search-spot-scroll").evaluate(n => n.scrollTop)).toBe(original.scroll);
   await expect.poll(() => page.locator(".leaflet-marker-icon").evaluate(n => n.getBoundingClientRect().toJSON())).toEqual(original.marker);
@@ -368,22 +382,25 @@ test("detail notes guard mode changes, search, favorite removal and forgetting t
     await detail(page).getByRole("textbox", { name: "鳥點筆記" }).fill(text);
   };
   await editNote("pending");
-  await button(page, "鳥種").click();
+  await chooseDestination(page, "搜尋鳥種");
   await button(dialog(page), "繼續編輯").click();
-  await expect(button(page, "鳥點")).toHaveAttribute("aria-pressed", "true");
-  await button(page, "搜尋").click();
+  await expect(detail(page).getByRole("textbox", { name: "鳥點筆記" })).toHaveValue("pending");
+  await button(page.locator(".search-navigation"), "修改搜尋").click();
   await button(dialog(page), "繼續編輯").click();
   await expect(detail(page)).toBeVisible();
   await button(detail(page), "取消收藏鳥點").click();
   await button(dialog(page), "繼續編輯").click();
   await expect(button(detail(page), "取消收藏鳥點")).toHaveAttribute("aria-pressed", "true");
-  await button(page, "忘記 API key").click();
+  await chooseDestination(page, "設定與說明");
   await failNextWrite(page);
   await button(dialog(page), "儲存").click();
   await expect(dialog(page).getByRole("alert")).toContainText("無法讀寫");
-  // A second intent arriving before the original is resolved cannot replace the key-gate destination.
-  await page.locator(".spot-search-nav button").first().dispatchEvent("click");
+  // A second intent cannot replace the pending settings destination.
+  await page.locator(".search-wide-navigation button").first().dispatchEvent("click");
   await button(dialog(page), "儲存").click();
+  await expect(dialog(page)).toHaveAccessibleName("設定與說明");
+  await button(dialog(page), "移除 API key").click();
+  await button(dialog(page), "確認移除").click();
   await expect(button(page, "驗證 API key")).toBeVisible();
   expect((await db(page, "read")).find(s => s.locId === "L102").note).toBe("pending");
 });

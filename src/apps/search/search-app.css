@@ -741,8 +741,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
 .search-spot-notes { padding-top: 14px; }
 .search-spot-notes p { white-space: pre-wrap; font-size: 14px; }
 .search-spot-notes textarea { display: block; margin: 8px 0; width: 100%; min-height: 110px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font: inherit; font-size: 16px; }
-.search-spot-note-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.spot-maps-link { margin-top: 10px; }
+.search-spot-note-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.search-spot-notes > .search-spot-note-actions:not(:empty) { margin-top: 10px; }
 .search-spot-messages { flex: 0 0 auto; font-size: 13px; }
 .search-spot-messages:empty { display: none; }
 .search-spot-messages > div { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: white; }

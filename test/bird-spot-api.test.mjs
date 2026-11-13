@@ -111,7 +111,7 @@ for (const kind of ["Node", "Worker"]) {
   test(`${kind} rejects malformed IDs and non-observation payloads rather than a false empty success`, async (context) => {
     let payload;
     const request = await runtime(kind, async () => new Response(payload), context);
-    for (const value of ["not-json", {}, [null], [{...records[0], locId: "invalid"}], [{...records[0], locId: null}], [{...records[0], speciesCode: null}], [{...records[0], obsDt: null}], [{...records[0], subId: "invalid"}]]) {
+    for (const value of ["not-json", {}, [null], [{...records[0], locId: "invalid"}], [{...records[0], locId: null}], [records[0], {...records[1], locId: "invalid"}], [{...records[0], speciesCode: null}], [{...records[0], obsDt: null}], [{...records[0], subId: "invalid"}]]) {
       payload = typeof value === "string" ? value : JSON.stringify(value);
       const response = await request("/api/bird-spots/observations?locId=L123");
       assert.equal(response.status, 502);

@@ -23,11 +23,10 @@ export function useBirdSpotMap({ model, mapRef, entriesRef, listRef }: {
     }
     snapshot.current = null;
   };
-  const { workspaceView: view, recent } = model;
+  const { workspaceView: view } = model;
   const spot = model.detailSpot;
-  const metadata = recent.kind === "ready" && recent.response.locId === spot?.locId ? recent.response.observations.find(o => o.lat !== null && o.lng !== null) : null;
-  const lat = spot?.lat ?? metadata?.lat ?? null;
-  const lng = spot?.lng ?? metadata?.lng ?? null;
+  const lat = spot?.lat ?? null;
+  const lng = spot?.lng ?? null;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;

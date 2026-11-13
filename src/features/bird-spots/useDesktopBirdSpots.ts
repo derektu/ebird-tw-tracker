@@ -3,7 +3,7 @@ import type { BirdSpot, BirdSpotRecentResponse, Observation, SavedBirdSpot, Spec
 import { useBirdSpotNavigation } from "./navigation";
 import { fetchJson } from "../../api/client";
 import { sortSavedBirdSpots } from "../../domain/saved-bird-spots.mjs";
-import { normalizeBirdSpot } from "../../domain/bird-spots.mjs";
+import { getBirdSpotRecentDetail, normalizeBirdSpot } from "../../domain/bird-spots.mjs";
 import { createDesktopSavedBirdSpotStore } from "../map/desktop-saved-bird-spots.mjs";
 
 const defaultRecentDays = 3;
@@ -130,18 +130,13 @@ export function useDesktopBirdSpots() {
   };
   const saveNote = (spot: BirdSpot, note: string) => updateMetadata(spot, { note });
   const spots = collection.kind === "ready" ? sortSavedBirdSpots(collection.spots) : [];
-  const metadata = workspaceView.kind === "detail" && recent.kind === "ready" && recent.response.locId === workspaceView.spot.locId ? recent.response.observations : [];
-  const coordinates = metadata.find(o => o.lat !== null && o.lng !== null);
-  const detailSpot: BirdSpot | null = workspaceView.kind === "detail" ? {
-    ...workspaceView.spot,
-    locName: workspaceView.spot.locName ?? metadata.find(o => o.locName)?.locName ?? null,
-    lat: workspaceView.spot.lat ?? coordinates?.lat ?? null,
-    lng: workspaceView.spot.lng ?? coordinates?.lng ?? null,
-    locationType: workspaceView.spot.locationType === "unknown" ? metadata.find(o => o.locationType !== "unknown")?.locationType ?? "unknown" : workspaceView.spot.locationType,
-  } : null;
+  const detail = workspaceView.kind === "detail" ? getBirdSpotRecentDetail(workspaceView.spot, recent.kind === "ready" ? recent.response : null) : null;
+  const detailSpot = detail?.spot ?? null;
+  const detailObservations = detail?.observations ?? [];
+  const hasOtherLocations = detail?.hasOtherLocations ?? false;
   const saved = (locId: string) => spots.find(s => s.locId === locId);
   const available = collection.kind === "ready";
-  return { view, workspaceView, ...navigation, detailSpot, recent, days, setDays, onlySpecies, setOnlySpecies, collection, spots, pending, available, saved,
+  return { view, workspaceView, ...navigation, detailSpot, detailObservations, hasOtherLocations, recent, days, setDays, onlySpecies, setOnlySpecies, collection, spots, pending, available, saved,
     notice, actionError, dismissError: () => setActionError(""), undo, restore, toggle, toggleObservation, saveNote, updateMetadata,
     beforeDetailOpen, beforeResultsReplace, resetForSearch, showSpotResults, showResults, showSaved, open, back, openObservation, legacyHint, loadCollection, refresh: () => setReload(n => n + 1) };
 }

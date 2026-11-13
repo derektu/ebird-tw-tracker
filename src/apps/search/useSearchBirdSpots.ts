@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchBirdSpotRecent } from "../../api/search-app-client.mjs";
-import { normalizeBirdSpot } from "../../domain/bird-spots.mjs";
+import { getBirdSpotRecentDetail, normalizeBirdSpot } from "../../domain/bird-spots.mjs";
 import { readBrowserApiKey } from "../../storage/browser-api-key";
 import type { BirdSpot, BirdSpotRecentResponse, Observation, SavedBirdSpot, Species } from "../../types/domain";
 import { createIndexedDbSavedBirdSpotStore } from "./browser-saved-bird-spots.mjs";
@@ -127,16 +127,11 @@ export function useSearchBirdSpots({ store, fetchRecent } = browserDependencies)
     replace(await store.update(locId, fields));
     setNotice("已儲存收藏");
   });
-  const rows = view.kind === "detail" && recent.kind === "ready" ? recent.response.observations : [];
-  const coordinates = rows.find(row => row.lat !== null && row.lng !== null);
-  const detailSpot = view.kind === "detail" ? {
-    ...view.spot,
-    locName: view.spot.locName ?? rows.find(row => row.locName)?.locName ?? null,
-    lat: view.spot.lat ?? coordinates?.lat ?? null,
-    lng: view.spot.lng ?? coordinates?.lng ?? null,
-    locationType: view.spot.locationType === "unknown" ? rows.find(row => row.locationType !== "unknown")?.locationType ?? "unknown" : view.spot.locationType,
-  } : null;
-  return { view, collection, recent, detailSpot, days, setDays: (value: number) => { if (value !== days) { invalidate(); setDays(value); } }, onlySpecies, setOnlySpecies, pending, saved,
+  const detail = view.kind === "detail" ? getBirdSpotRecentDetail(view.spot, recent.kind === "ready" ? recent.response : null) : null;
+  const detailSpot = detail?.spot ?? null;
+  const detailObservations = detail?.observations ?? [];
+  const hasOtherLocations = detail?.hasOtherLocations ?? false;
+  return { view, collection, recent, detailSpot, detailObservations, hasOtherLocations, days, setDays: (value: number) => { if (value !== days) { invalidate(); setDays(value); } }, onlySpecies, setOnlySpecies, pending, saved,
     available: collection.kind === "ready", actionError, notice, undo, restore, toggle, toggleObservation,
     saveNote, update, loadCollection, dismissError: () => setActionError(""), navigate, resumeView, open, openObservation, refresh: () => { invalidate(); setRevision(value => value + 1); } };
 }

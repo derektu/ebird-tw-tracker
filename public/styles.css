@@ -1206,3 +1206,7 @@ select {
   .search-spots { grid-template-columns: 76px minmax(180px, 1fr) 66px; }
   .bird-spots-overlay { position: fixed; }
 }
+
+.bird-spot-scope, .bird-spot-source { overflow-wrap: anywhere; }
+.bird-spot-scope { margin: 10px 18px; }
+.bird-spot-source { margin: 4px 0 0; }

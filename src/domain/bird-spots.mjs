@@ -46,11 +46,11 @@ export function normalizeBirdSpot(item) {
   };
 }
 
-export function mapBirdSpotObservations(items, locId) {
+export function mapBirdSpotObservations(items) {
   if (!Array.isArray(items)) throw new BirdSpotError(502, "malformed_upstream_response", "eBird 回傳的資料無法解析");
   return items.map((item) => {
     const spot = normalizeBirdSpot(item);
-    if (!spot || spot.locId !== locId || typeof item.speciesCode !== "string" || !item.speciesCode.trim()
+    if (!spot || typeof item.speciesCode !== "string" || !item.speciesCode.trim()
       || typeof item.obsDt !== "string" || !item.obsDt.trim() || !/^S\d+$/.test(item.subId)) {
       throw new BirdSpotError(502, "malformed_upstream_response", "eBird 回傳的資料無法解析");
     }
@@ -67,4 +67,21 @@ export function mapBirdSpotObservations(items, locId) {
       obsReviewed: item.obsReviewed === true,
     };
   }).sort((a, b) => b.obsDt.localeCompare(a.obsDt));
+}
+
+export function getBirdSpotRecentDetail(spot, response) {
+  const observations = response?.locId === spot.locId ? response.observations : [];
+  const matching = observations.filter(row => row.locId === spot.locId);
+  const coordinates = matching.find(row => row.lat !== null && row.lng !== null);
+  return {
+    spot: {
+      ...spot,
+      locName: spot.locName ?? matching.find(row => row.locName)?.locName ?? null,
+      lat: spot.lat ?? coordinates?.lat ?? null,
+      lng: spot.lng ?? coordinates?.lng ?? null,
+      locationType: spot.locationType === "unknown" ? matching.find(row => row.locationType !== "unknown")?.locationType ?? "unknown" : spot.locationType,
+    },
+    observations,
+    hasOtherLocations: observations.some(row => row.locId !== spot.locId),
+  };
 }

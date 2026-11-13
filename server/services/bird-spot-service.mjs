@@ -35,7 +35,7 @@ export async function fetchBirdSpotRecent({ apiKey, locId, days, upstreamFetch =
     }
     throw new BirdSpotError(503, "network_unavailable", "目前無法連線至 eBird，請稍後再試");
   }
-  return { locId, days, generatedAt: new Date().toISOString(), observations: mapBirdSpotObservations(data, locId) };
+  return { locId, days, generatedAt: new Date().toISOString(), observations: mapBirdSpotObservations(data) };
 }
 
 export function createBirdSpotService({ getApiKey, upstreamFetch = fetch }) {

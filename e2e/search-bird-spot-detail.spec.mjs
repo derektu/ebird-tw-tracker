@@ -1,3 +1,4 @@
+import { openSearch, chooseDestination, forgetKey } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const species = { speciesCode: "grpsni1", comName: "彩鷸", sciName: "Rostratula benghalensis" };
@@ -18,10 +19,9 @@ async function setup(page, { recentHandler } = {}) {
   await expect(page.locator(".search-workspace")).toBeVisible();
 }
 async function search(page) {
-  const expand = page.getByRole("button", { name: "展開搜尋條件" });
-  if (await expand.isVisible()) await expand.click();
+  await openSearch(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(page.locator(".observation-card")).toHaveCount(12);
 }
 async function open(page) {
@@ -51,23 +51,23 @@ test("species days can be cleared with Backspace before replacement and invalid 
   const requests = [];
   page.on("request", request => { if (new URL(request.url()).pathname === "/api/observations") requests.push(request.url()); });
   await setup(page);
-  await page.getByRole("button", { name: "展開搜尋條件" }).click();
+  await openSearch(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
   const days = page.getByRole("spinbutton", { name: "最近天數", exact: true });
   await days.focus();
   await days.press("Backspace");
   await expect(days).toHaveValue("");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   expect(requests).toHaveLength(0);
   expect(await days.evaluate(node => node.validity.valueMissing)).toBe(true);
   for (const invalid of ["0", "31", "1.5"]) {
     await days.fill(invalid);
-    await page.getByRole("button", { name: "搜尋", exact: true }).click();
+    await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
     expect(await days.evaluate(node => node.checkValidity())).toBe(false);
     expect(requests).toHaveLength(0);
   }
   await days.fill("14");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(page.locator(".observation-card")).toHaveCount(12);
   expect(requests.map(url => new URL(url).searchParams.get("days"))).toEqual(["14"]);
 });
@@ -157,8 +157,8 @@ for (const width of [320, 390, 402, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     await setup(page);
     if (width < 720) {
-      await expect(page.getByRole("button", { name: "展開搜尋條件" })).toBeVisible();
-      expect(await page.locator(".search-form-card").evaluate(node => node.getBoundingClientRect().height)).toBe(70);
+      await expect(page.locator(".search-navigation").getByRole("button", { name: "搜尋", exact: true })).toBeVisible();
+      expect(await page.locator(".search-form-card").evaluate(node => node.getBoundingClientRect().height)).toBe(60);
     }
     await expect(results(page)).toHaveCount(0);
     await search(page);
@@ -259,7 +259,7 @@ test("favorites commit to IndexedDB, preserve notes on undo, survive forget-key 
   await detail(page).getByRole("button", { name: "取消收藏鳥點", exact: true }).click();
   await page.getByRole("button", { name: "復原收藏" }).click();
   await expect(detail(page).getByText("下次從北側進入", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "忘記 API key" }).click();
+  await forgetKey(page);
   await expect(page.getByRole("button", { name: "驗證 API key" })).toBeVisible();
   expect((await favorites(page))[0].spots).toMatchObject([{ locId: "L123", note: "下次從北側進入" }]);
   expect(JSON.stringify(await favorites(page))).not.toContain("fixture-browser-key");
@@ -321,7 +321,8 @@ test("obsolete detail responses and failures cannot replace a newer location or 
   await held[0].fulfill({ status: 503, json: { code: "upstream_error", error: "過時錯誤" } }).catch(() => {});
   await held[1].fulfill({ json: { ...recent("L124"), observations: [{ ...recent("L124").observations[0], comName: "過時結果" }] } }).catch(() => {});
   await expect(detail(page)).not.toContainText("過時");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await openSearch(page);
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(detail(page)).toHaveCount(0);
   await expect(results(page)).toBeVisible();
 });
@@ -434,7 +435,7 @@ test('bird spot marker stays above the half sheet after search controls and map 
   await page.screenshot({ path: testInfo.outputPath('marker-above-half-sheet.png') });
   await page.getByRole('button', { name: '修改搜尋', exact: true }).click();
   await expect.poll(visibleMarker).toBe(true);
-  await page.getByRole('button', { name: '收合條件', exact: true }).click();
+  await page.getByRole('button', { name: '取消搜尋', exact: true }).click();
   await expect.poll(visibleMarker).toBe(true);
   await page.setViewportSize({ width: 402, height: 650 });
   await expect.poll(visibleMarker).toBe(true);
@@ -475,8 +476,7 @@ test("other-only source records never replace a saved query identity or invent i
     request.onsuccess = () => { const db = request.result; const tx = db.transaction("saved-bird-spots", "readwrite"); tx.objectStore("saved-bird-spots").put({ version: 1, spots: [spot] }, "collection"); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
   }), parent);
   await page.reload();
-  await page.getByRole("button", { name: "展開搜尋條件", exact: true }).click();
-  await page.getByRole("button", { name: "我的鳥點", exact: true }).click();
+  await chooseDestination(page, "我的鳥點");
   await page.locator(".spot-row-name").filter({ hasText: "全區收藏" }).click();
   await expect(detail(page).getByText(mixedScopeNotice, { exact: true })).toBeVisible();
   await expect(detail(page).locator(".search-spot-source")).toContainText("北岸觀察點 · L456");

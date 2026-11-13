@@ -1,3 +1,4 @@
+import { openSearch } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const apiKey = "browser-owned-key";
@@ -64,10 +65,9 @@ async function signInAndSearch(page, observationResponse = observations) {
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
   await expect(page.locator(".search-workspace")).toBeVisible();
-  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
-  if (await expandInitial.isVisible()) await expandInitial.click();
+  await openSearch(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
 }
 
 test("mobile Bottom Sheet preserves the full selected result collection through every sheet state", async ({ page }) => {
@@ -81,7 +81,9 @@ test("mobile Bottom Sheet preserves the full selected result collection through 
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
   await expect(items).toHaveCount(2);
   await expect(markers).toHaveCount(2);
+  await openSearch(page);
   await expect(page.getByPlaceholder("輸入中文名、英文名或 species code")).toHaveCSS("font-size", "16px");
+  await page.getByRole("button", { name: "取消搜尋", exact: true }).click();
   await expect(items.nth(0)).toHaveClass(/active/);
   await expect(items.nth(0).getByRole("button", { name: "查看鳥點 宜蘭雙連埤" })).toBeVisible();
   await expect(items.nth(0).getByRole("link", { name: "開啟 Checklist" })).toHaveAttribute(
@@ -227,8 +229,7 @@ test("mobile search controls compact after success, preserve state while editing
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
   await expect(page.locator(".search-workspace")).toBeVisible();
-  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
-  if (await expandInitial.isVisible()) await expandInitial.click();
+  await openSearch(page);
 
   const field = page.getByPlaceholder("輸入中文名、英文名或 species code");
   await expect(field).toBeVisible();
@@ -245,21 +246,21 @@ test("mobile search controls compact after success, preserve state while editing
     body: JSON.stringify(observations),
   }));
   await field.fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
 
   const edit = page.getByRole("button", { name: "修改搜尋" });
   const sheet = page.getByRole("complementary", { name: "搜尋結果" });
   const items = page.locator(".observation-card");
   await expect(edit).toBeVisible();
   await expect(edit).toBeFocused();
-  await expect(page.getByRole("group", { name: "目前搜尋條件" })).toContainText("彩鷸");
-  await expect(page.getByRole("group", { name: "目前搜尋條件" })).toContainText("最近 3 天");
+  await expect(page.locator(".search-navigation")).toContainText("彩鷸");
+  await expect(page.locator(".search-navigation")).toContainText("最近 3 天");
   await expect(field).toBeHidden();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
   await expect(items.nth(0)).toHaveClass(/active/);
 
   const mapGeometry = await page.evaluate(() => {
-    const controls = document.querySelector(".mobile-search-toolbar").getBoundingClientRect();
+    const controls = document.querySelector(".search-navigation").getBoundingClientRect();
     const map = document.querySelector("#map");
     const mapRect = map.getBoundingClientRect();
     const sheet = document.querySelector(".side").getBoundingClientRect();
@@ -280,10 +281,10 @@ test("mobile search controls compact after success, preserve state while editing
   await expect(field).toBeFocused();
   await expect(items).toHaveCount(2);
   await expect(items.nth(0)).toHaveClass(/active/);
-  await expect(sheet).toHaveAttribute("data-sheet-state", "half");
+  await expect(page.locator(".side")).toHaveAttribute("data-sheet-state", "half");
 
   await field.fill("");
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("請輸入鳥種名稱、英文名或 species code");
   await expect(field).toBeVisible();
   await expect(items).toHaveCount(2);
@@ -296,7 +297,7 @@ test("mobile search controls compact after success, preserve state while editing
     body: '{"error":{"code":"upstream_error","message":"暫時無法搜尋"}}',
   }));
   await field.fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(field).toBeVisible();
   await expect(items).toHaveCount(2);
@@ -308,12 +309,12 @@ test("mobile search controls compact after success, preserve state while editing
     contentType: "application/json",
     body: JSON.stringify(observations),
   }));
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(edit).toBeVisible();
   await expect(edit).toBeFocused();
 });
 
-test("mobile form collapses without publishing a Sheet and preserves a published scope over draft edits", async ({ page }) => {
+test("mobile form cancels without publishing a Sheet and restores a published scope after draft edits", async ({ page }) => {
   await page.setViewportSize({ width: 483, height: 852 });
   await page.route("**/api/key/validate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: '{"valid":true}' }));
   await page.route("**/api/species/resolve*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ species, candidates: [species] }) }));
@@ -324,19 +325,18 @@ test("mobile form collapses without publishing a Sheet and preserves a published
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
   await expect(page.locator(".search-workspace")).toBeVisible();
-  const expandInitial = page.getByRole("button", { name: "展開搜尋條件" });
-  if (await expandInitial.isVisible()) await expandInitial.click();
+  await openSearch(page);
   await expect(page.getByRole("complementary", { name: "搜尋結果" })).toHaveCount(0);
 
-  const collapse = page.getByRole("button", { name: "收合條件" });
+  const collapse = page.getByRole("button", { name: "取消搜尋", exact: true });
   await collapse.click();
-  const expand = page.getByRole("button", { name: "展開搜尋條件" });
+  const expand = page.locator(".search-navigation").getByRole("button", { name: "搜尋", exact: true });
   await expect(expand).toBeFocused();
   await expand.click();
   await expect(page.getByPlaceholder("輸入中文名、英文名或 species code")).toBeFocused();
 
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill("彩鷸");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   const sheet = page.getByRole("complementary", { name: "搜尋結果" });
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
   const active = page.locator(".observation-card.active");
@@ -344,15 +344,15 @@ test("mobile form collapses without publishing a Sheet and preserves a published
 
   await page.getByRole("button", { name: "修改搜尋" }).click();
   await page.getByRole("spinbutton", { name: "最近天數" }).fill("7");
-  await page.getByRole("button", { name: "收合條件" }).click();
+  await page.getByRole("button", { name: "取消搜尋", exact: true }).click();
   await expect(page.getByText("最近 3 天", { exact: true })).toBeVisible();
   await expect(sheet).toHaveAttribute("data-sheet-state", "half");
   await expect(active).toHaveCount(1);
   await page.getByRole("button", { name: "修改搜尋" }).click();
-  await expect(page.getByRole("spinbutton", { name: "最近天數" })).toHaveValue("7");
+  await expect(page.getByRole("spinbutton", { name: "最近天數" })).toHaveValue("3");
 
   response = { ...observations, observations: [] };
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
   await expect(page.getByText("這個條件沒有找到有座標的公開紀錄。")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "搜尋結果" })).toHaveCount(0);
 });

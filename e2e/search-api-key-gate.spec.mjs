@@ -1,3 +1,4 @@
+import { forgetKey } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const apiKey = "browser-owned-key";
@@ -16,7 +17,7 @@ test("a first-time visitor sees the API key gate instead of search controls", as
 
   await expect(page.getByRole("heading", { name: "輸入你的 eBird API key" })).toBeVisible();
   await expect(page.getByRole("button", { name: "驗證 API key" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜尋" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜尋", exact: true })).toHaveCount(0);
 });
 
 test("a valid key is sent in a same-origin header, stored, and revalidated on return", async ({ page }) => {
@@ -25,8 +26,8 @@ test("a valid key is sent in a same-origin header, stored, and revalidated on re
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
-  await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜尋" })).toBeVisible();
+  await expect(page.locator(".search-workspace")).toBeVisible();
+  await expect(page.locator(".search-navigation").getByRole("button", { name: "搜尋", exact: true })).toBeVisible();
 
   expect(requests).toHaveLength(1);
   expect(requests[0].url()).not.toContain(apiKey);
@@ -34,7 +35,7 @@ test("a valid key is sent in a same-origin header, stored, and revalidated on re
   await expect.poll(() => page.evaluate(() => localStorage.getItem("ebird-search-api-key"))).toBe(apiKey);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
+  await expect(page.locator(".search-workspace")).toBeVisible();
   expect(requests).toHaveLength(2);
 });
 
@@ -110,7 +111,7 @@ test("forgetting a validated key leaves other browser-local product data intact"
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
-  await page.getByRole("button", { name: "忘記 API key" }).click();
+  await forgetKey(page);
 
   await expect(page.getByRole("heading", { name: "輸入你的 eBird API key" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("ebird-search-api-key"))).toBeNull();

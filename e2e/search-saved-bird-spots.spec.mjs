@@ -1,3 +1,4 @@
+import { forgetKey } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -34,10 +35,10 @@ test("real browser favorites survive reload, actual forget-key flow and offline 
     await window.testSavedBirdSpots.update(spot.locId, { alias: "自己的鳥點", note: "自己的筆記", pinned: true });
   }, source);
   await page.reload();
-  await expect(page.getByRole("button", { name: "忘記 API key" })).toBeVisible();
+  await expect(page.locator(".search-navigation")).toBeVisible();
   await storeInPage(page);
   expect(await page.evaluate(() => window.testSavedBirdSpots.list())).toMatchObject([{ locId: "L123", alias: "自己的鳥點", note: "自己的筆記", pinned: true }]);
-  await page.getByRole("button", { name: "忘記 API key" }).click();
+  await forgetKey(page);
   await expect(page.getByRole("button", { name: "驗證 API key" })).toBeVisible();
   expect(await page.evaluate(() => window.localStorage.getItem("ebird-search-api-key"))).toBeNull();
   await page.getByRole("textbox", { name: "eBird API key" }).fill("replacement-browser-test-key");

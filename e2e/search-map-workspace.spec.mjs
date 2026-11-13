@@ -1,3 +1,4 @@
+import { openSearch, forgetKey } from "./fixtures/search-navigation.mjs";
 import { expect, test } from "./fixtures/test.mjs";
 
 const apiKey = "browser-owned-key";
@@ -32,6 +33,7 @@ async function signIn(page) {
   await page.goto("/");
   await page.getByRole("textbox", { name: "eBird API key" }).fill(apiKey);
   await page.getByRole("button", { name: "驗證 API key" }).click();
+  await openSearch(page);
   await expect(page.getByRole("heading", { name: "搜尋台灣鳥種觀察紀錄" })).toBeVisible();
 }
 
@@ -44,8 +46,9 @@ async function stubSpecies(page, species) {
 }
 
 async function search(page, term) {
+  await openSearch(page);
   await page.getByPlaceholder("輸入中文名、英文名或 species code").fill(term);
-  await page.getByRole("button", { name: "搜尋" }).click();
+  await page.locator(".search-form").getByRole("button", { name: "搜尋", exact: true }).click();
 }
 
 test("selecting a list item activates its Pin, and selecting a Pin activates its list item", async ({ page }) => {
@@ -136,7 +139,9 @@ test("only a successful observation search updates recent species, exposed on fi
   await expect(page.getByRole("alert")).toBeVisible();
 
   const field = page.getByPlaceholder("輸入中文名、英文名或 species code");
+  await openSearch(page);
   await field.fill("");
+  await field.blur();
   await field.focus();
   await expect(page.getByRole("button", { name: /彩鷸/ })).toHaveCount(0);
 
@@ -151,7 +156,9 @@ test("only a successful observation search updates recent species, exposed on fi
   await search(page, "彩鷸");
   await expect(page.getByText("宜蘭雙連埤")).toBeVisible();
 
+  await openSearch(page);
   await field.fill("");
+  await field.blur();
   await field.focus();
   await expect(page.getByRole("button", { name: /彩鷸/ })).toBeVisible();
 
@@ -172,7 +179,7 @@ test("forgetting the API key leaves the recent species MRU unchanged", async ({ 
   const stored = await page.evaluate(() => localStorage.getItem("search-recent-species"));
   expect(stored).toContain("grpsni1");
 
-  await page.getByRole("button", { name: "忘記 API key" }).click();
+  await forgetKey(page);
   await expect(page.getByRole("heading", { name: "輸入你的 eBird API key" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("search-recent-species"))).toBe(stored);
 });

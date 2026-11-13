@@ -58,8 +58,11 @@ export function SearchBirdSpotDetail({ model, editor, sheetState, onBack, onTogg
           <label htmlFor="search-spot-note" className="screen-reader-status">鳥點筆記</label>
           <textarea id="search-spot-note" ref={textareaRef} value={draft.fields.note} onChange={event => editor.change({ note: event.target.value })} />
           <div className="search-spot-note-actions"><button className="search-app-primary" disabled={!model.available || model.pending.has(spot.locId)}>儲存筆記{favorite ? "" : "並收藏"}</button><button type="button" className="search-app-secondary" onClick={() => editor.request("cancel-edit", () => {})}>取消編輯</button></div>
-        </form> : <><p>{favorite?.note || "尚未加入筆記"}</p><button className="search-app-secondary" disabled={!model.available} onClick={() => { editor.begin("note", spot); window.requestAnimationFrame(() => textareaRef.current?.focus()); }}>編輯筆記</button></>}
-        {spot.lat !== null && spot.lng !== null && <a className="search-app-secondary spot-maps-link" href={`https://www.google.com/maps?q=${spot.lat},${spot.lng}`} target="_blank" rel="noreferrer">Google Maps ↗</a>}
+        </form> : <p>{favorite?.note || "尚未加入筆記"}</p>}
+        <div className="search-spot-note-actions">
+          {!draft && <button className="search-app-secondary" disabled={!model.available} onClick={() => { editor.begin("note", spot); window.requestAnimationFrame(() => textareaRef.current?.focus()); }}>編輯筆記</button>}
+          {spot.lat !== null && spot.lng !== null && <a className="search-app-secondary" href={`https://www.google.com/maps?q=${spot.lat},${spot.lng}`} target="_blank" rel="noreferrer">Google Maps ↗</a>}
+        </div>
       </section>
     </div>
   </aside>;

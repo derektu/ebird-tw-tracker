@@ -59,6 +59,27 @@ for (const kind of ["Node", "Worker"]) {
     }
   });
 
+  test(`${kind} preserves mixed and other-only observation sources within the requested envelope`, async (context) => {
+    let payload = [records[0], { ...records[1], locId: "L456", locName: "北岸觀察點", lat: 25, lng: 121, locationPrivate: true }];
+    const requests = [];
+    const request = await runtime(kind, async (upstream) => { requests.push(upstream.url); return Response.json(payload); }, context);
+    for (const onlyOther of [false, true]) {
+      if (onlyOther) payload = [payload[1]];
+      const response = await request("/api/bird-spots/observations?locId=L123&days=1");
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.locId, "L123");
+      assert.equal(body.days, 1);
+      assert.equal(body.observations.length, payload.length);
+      assert.deepEqual(body.observations.map(row => row.locId), onlyOther ? ["L456"] : ["L456", "L123"]);
+      assert.equal(body.observations[0].locName, "北岸觀察點");
+      assert.equal(body.observations[0].lat, 25);
+      assert.equal(body.observations[0].subId, records[1].subId);
+      assert.equal(body.observations[0].locationType, "personal");
+    }
+    assert.ok(requests.every(url => url === "https://api.ebird.org/v2/data/obs/L123/recent?back=1&includeProvisional=true&sppLocale=zh"));
+  });
+
   test(`${kind} validates IDs, days, method and query allowlist before an upstream request`, async (context) => {
     let calls = 0;
     const request = await runtime(kind, async () => { calls++; return Response.json([]); }, context);
@@ -87,10 +108,10 @@ for (const kind of ["Node", "Worker"]) {
     }
   });
 
-  test(`${kind} rejects malformed, different-location and non-observation payloads rather than a false empty success`, async (context) => {
+  test(`${kind} rejects malformed IDs and non-observation payloads rather than a false empty success`, async (context) => {
     let payload;
     const request = await runtime(kind, async () => new Response(payload), context);
-    for (const value of ["not-json", {}, [null], [{...records[0], locId: "L456"}], [{...records[0], speciesCode: null}], [{...records[0], obsDt: null}], [{...records[0], subId: "invalid"}]]) {
+    for (const value of ["not-json", {}, [null], [{...records[0], locId: "invalid"}], [{...records[0], locId: null}], [{...records[0], speciesCode: null}], [{...records[0], obsDt: null}], [{...records[0], subId: "invalid"}]]) {
       payload = typeof value === "string" ? value : JSON.stringify(value);
       const response = await request("/api/bird-spots/observations?locId=L123");
       assert.equal(response.status, 502);

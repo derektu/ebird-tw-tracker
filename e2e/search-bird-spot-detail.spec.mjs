@@ -445,3 +445,47 @@ test('bird spot marker stays above the half sheet after search controls and map 
   await page.getByRole('button', { name: '重開鳥點詳情' }).click();
   await expect.poll(visibleMarker).toBe(true);
 });
+
+const mixedScopeNotice = "eBird 對此鳥點的查詢回傳了其他地點的紀錄；以下標示實際觀察地點。";
+test("mixed source details preserve observation provenance and scope notice under species filtering", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  const other = { ...source, locId: "L456", locName: "北岸 <img src=x onerror=alert(1)>", speciesCode: "comsan", comName: "磯鷸", subId: "S456", locationType: "hotspot" };
+  await setup(page, { recentHandler: route => route.fulfill({ json: { ...recent(), observations: [other, { ...source, locationType: "hotspot" }] } }) });
+  await search(page);
+  await page.getByRole("button", { name: `查看鳥點 ${source.locName}`, exact: true }).click();
+  await expect(detail(page).getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+  await expect(detail(page).locator(".search-spot-source")).toHaveCount(2);
+  await expect(detail(page).locator(".search-spot-source").first()).toContainText("L456");
+  await expect(detail(page).locator(".search-spot-source").first()).toContainText(other.locName);
+  await expect(detail(page).locator(".search-spot-source img")).toHaveCount(0);
+  await expect(detail(page).getByRole("link", { name: "Checklist ↗" }).first()).toHaveAttribute("href", "https://ebird.org/checklist/S456");
+  await detail(page).getByRole("combobox", { name: "鳥點鳥種篩選" }).selectOption("original");
+  await expect(detail(page).locator(".search-spot-row")).toHaveCount(1);
+  await expect(detail(page).getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("other-only source records never replace a saved query identity or invent its map position", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const parent = { locId: "L123", locName: null, lat: null, lng: null, locationType: "unknown", alias: "全區收藏", note: "原本筆記", pinned: true, savedAt: "2026-11-11T00:00:00.000Z", updatedAt: "2026-11-11T00:00:00.000Z" };
+  const other = { ...source, locId: "L456", locName: "北岸觀察點", lat: 25, lng: 121, locationType: "hotspot" };
+  await setup(page, { recentHandler: route => route.fulfill({ json: { ...recent(), observations: [other] } }) });
+  await page.evaluate(spot => new Promise((resolve, reject) => {
+    const request = indexedDB.open("ebird-saved-bird-spots", 1);
+    request.onsuccess = () => { const db = request.result; const tx = db.transaction("saved-bird-spots", "readwrite"); tx.objectStore("saved-bird-spots").put({ version: 1, spots: [spot] }, "collection"); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
+  }), parent);
+  await page.reload();
+  await page.getByRole("button", { name: "展開搜尋條件", exact: true }).click();
+  await page.getByRole("button", { name: "我的鳥點", exact: true }).click();
+  await page.locator(".spot-row-name").filter({ hasText: "全區收藏" }).click();
+  await expect(detail(page).getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+  await expect(detail(page).locator(".search-spot-source")).toContainText("北岸觀察點 · L456");
+  await expect(detail(page).getByRole("link", { name: "Google Maps ↗", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("開啟鳥點詳情", { exact: true })).toHaveCount(0);
+  await expect(detail(page).locator(".search-spot-context")).toContainText("地點類型未知 · L123");
+  await detail(page).getByRole("button", { name: "編輯筆記", exact: true }).click();
+  await detail(page).getByRole("textbox", { name: "鳥點筆記", exact: true }).fill("更新全區筆記");
+  await detail(page).getByRole("button", { name: "儲存筆記", exact: true }).click();
+  await expect(detail(page).getByText("更新全區筆記", { exact: true })).toBeVisible();
+  expect((await favorites(page))[0].spots).toMatchObject([{ ...parent, note: "更新全區筆記", updatedAt: expect.any(String) }]);
+});

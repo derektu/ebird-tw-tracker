@@ -738,3 +738,39 @@ test('manager lists scroll independently and editor actions stay visible at supp
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
   }
 });
+
+const mixedScopeNotice = "eBird 對此鳥點的查詢回傳了其他地點的紀錄；以下標示實際觀察地點。";
+test("Desktop mixed source details retain provenance and scope when filtering", async ({ page }) => {
+  const other = { ...record, locId: "L456", locName: "北岸 <img src=x onerror=alert(1)>", speciesCode: "comsan", comName: "磯鷸", subId: "S456", locationType: "hotspot" };
+  await install(page, { onRecent: route => route.fulfill({ json: { ...recent("L123"), observations: [other, { ...record, locationType: "hotspot" }] } }) });
+  await page.locator(".item").first().getByRole("button", { name: "查看鳥點", exact: true }).click();
+  const detail = page.getByRole("complementary", { name: "鳥點詳情", exact: true });
+  await expect(detail.getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+  await expect(detail.locator(".bird-spot-source")).toHaveCount(2);
+  await expect(detail.locator(".bird-spot-source").first()).toContainText(other.locName);
+  await expect(detail.locator(".bird-spot-source img")).toHaveCount(0);
+  await expect(detail.getByRole("link", { name: "Checklist ↗" }).first()).toHaveAttribute("href", "https://ebird.org/checklist/S456");
+  await detail.getByRole("button", { name: "只看彩鷸", exact: true }).click();
+  await expect(detail.locator(".bird-spot-observation")).toHaveCount(1);
+  await expect(detail.getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+});
+
+test("Desktop other-only sources cannot relocate or rewrite a saved query spot", async ({ page }) => {
+  const parent = { ...favorite, locName: null, lat: null, lng: null, locationType: "unknown", alias: "全區收藏", pinned: true };
+  const other = { ...record, locId: "L456", locName: "北岸觀察點", lat: 25, lng: 121, locationType: "hotspot" };
+  const calls = await install(page, { saved: [parent], onRecent: route => route.fulfill({ json: { ...recent("L123"), observations: [other] } }) });
+  await page.getByRole("button", { name: /我的鳥點/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /全區收藏/ }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "查看近期鳥種", exact: true }).click();
+  const detail = page.getByRole("complementary", { name: "鳥點詳情", exact: true });
+  await expect(detail.getByText(mixedScopeNotice, { exact: true })).toBeVisible();
+  await expect(detail.locator(".bird-spot-source")).toContainText("北岸觀察點 · L456");
+  await expect(page.locator(".bird-spot-marker")).toHaveCount(0);
+  await expect(page.getByText("此鳥點沒有可用座標；未建立位置標記", { exact: true })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "Google Maps ↗", exact: true })).toHaveCount(0);
+  await detail.getByRole("button", { name: "編輯筆記", exact: true }).click();
+  await detail.getByRole("textbox", { name: "鳥點筆記", exact: true }).fill("更新全區筆記");
+  await detail.getByRole("button", { name: "儲存筆記", exact: true }).click();
+  await expect(detail.getByText("更新全區筆記", { exact: true })).toBeVisible();
+  expect(calls.saved()).toMatchObject([{ ...parent, note: "更新全區筆記" }]);
+});

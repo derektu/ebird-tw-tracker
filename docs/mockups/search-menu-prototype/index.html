@@ -451,33 +451,43 @@
         color: #65735f;
       }
       .saved-card {
-        padding: 0;
+        padding: 6px 10px 10px;
         overflow: hidden;
+      }
+      .saved-heading {
+        display: flex;
+        align-items: center;
+        gap: 4px;
       }
       .saved-card .open-saved {
         text-align: left;
         display: block;
-        width: 100%;
-        padding: 18px;
-        min-height: 100px;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 0;
       }
       .saved-card h2 {
-        margin: 0 0 8px;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .saved-card p {
-        margin: 5px 0;
+        margin: 0;
         font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .saved-actions {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        border-top: 1px solid #edf0e8;
-        padding: 4px 10px;
+        flex-shrink: 0;
       }
-      .saved-actions span {
-        font-size: 12px;
-        color: var(--muted);
+      .saved-actions button {
+        min-width: 44px;
+        padding: 8px 6px;
+        font-size: 14px;
       }
       .status {
         display: inline-flex;
@@ -795,7 +805,6 @@
           location: "台北市北投區",
           note: "冬季水鳥，早上光線比較好。",
           pinned: true,
-          date: "今天",
         },
         {
           id: 1,
@@ -803,7 +812,6 @@
           location: "嘉義縣東石鄉",
           note: "下次帶望遠鏡，走北側木棧道。",
           pinned: false,
-          date: "11 月 10 日",
         },
       ];
       let selectedSaved = 0;
@@ -891,7 +899,7 @@
           ? items
               .map(
                 (b) =>
-                  `<article class="card saved-card"><button class="open-saved" data-id="${b.id}" data-action="saved-detail"><h2>${b.pinned ? "★" : "☆"} ${esc(b.name)}</h2><p>${b.location}</p><p>${esc(b.note)}</p></button><div class="saved-actions"><span>${b.date} 編輯</span><button data-id="${b.id}" data-action="pin-saved">${b.pinned ? "取消釘選" : "釘選"}</button><button data-id="${b.id}" data-action="edit">編輯</button><button data-id="${b.id}" data-action="remove-saved">移除</button></div></article>`,
+                  `<article class="card saved-card"><div class="saved-heading"><button class="open-saved" data-id="${b.id}" data-action="saved-detail" title="${esc(b.name)}"><h2>${esc(b.name)}</h2></button><div class="saved-actions"><button data-id="${b.id}" data-action="pin-saved" aria-label="${b.pinned ? "取消釘選" : "釘選"}${esc(b.name)}" aria-pressed="${b.pinned}">${b.pinned ? "★" : "☆"}</button><button data-id="${b.id}" data-action="edit">編輯</button><button data-id="${b.id}" data-action="remove-saved">移除</button></div></div><p>${esc(b.location)}</p></article>`,
               )
               .join("")
           : '<p class="muted">沒有符合的收藏鳥點。</p>';
@@ -1001,7 +1009,6 @@
           let item = savedPlaces.find((x) => x.id === selectedSaved);
           item.note = document.getElementById("edit-note").value;
           item.name = document.getElementById("edit-name").value;
-          item.date = "今天";
           editDirty = false;
           dialog = "";
           page = "saved";

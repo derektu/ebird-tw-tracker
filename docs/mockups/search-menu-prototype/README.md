@@ -4,6 +4,12 @@ Issue #61 compares two compact navigation structures for the browser Search App.
 
 Run from this worktree with `python3 -m http.server 7309 --bind 127.0.0.1 --directory docs/mockups/search-menu-prototype`, then open http://127.0.0.1:7309/. No dependencies, build, API requests, real credentials, browser storage, or map tiles are used. All state resets on reload. The local SVG map and observations are labeled demonstrations.
 
+## Scope of the proposed change
+
+The proposal is limited to browser Search App navigation on mobile and wide screens, moving API key management into settings, and compacting My places. In the revised My places list, each name shares one row with pin, edit, and remove controls. The location is a small second line; editing dates and note previews are omitted. Full notes remain in place detail and editing. Long names truncate without shrinking the 44 px action targets.
+
+These navigation and layout choices are still subject to user approval. Production code has not changed. Implementation should adapt the existing Search App components and visual style, retaining the existing Leaflet map, result rows, real data, queries, notes, and storage behavior. The schematic map, sample records, colors, and illustrative page styling are not a specification for replacing the whole app. The native Electron Desktop App is outside this proposal and will not change through this ticket.
+
 ## Compare
 
 - `?variant=A` is recommended. A 60 px toolbar has Menu, a context title, and Search or Modify. The main menu exposes 搜尋鳥種, 搜尋鳥點, 我的鳥點, then 設定與說明. Choosing a search destination opens its focused bottom sheet. Opening a function menu does not erase conditions. Before any search, only the compact toolbar and map are shown. There is no empty results sheet or marketing panel. A half sheet appears only for search results or selected saved-place detail.
@@ -18,7 +24,7 @@ The main destinations answer where to go. Search or Modify answers how to change
 
 Species search contains a name and editable 1–30 integer days. Bird-spot search contains only a name and searches public hotspots and personal saved places. No geographical filter is introduced. Each search mode retains its own committed conditions in memory. Selecting a mode opens those conditions. Submit commits the draft and shows sample results. Cancel, Escape, and a floating sheet backdrop discard the draft and retain the prior query/results. Opening and closing the menu does not change conditions. The prototype uses a fixed illustrative result set rather than claiming actual search results.
 
-My places is its own page with filtering, pinned/recent/name sorting, pin toggles, and removal. A saved item opens map detail, and that detail returns directly to My places. Edit is a child page with Back, Cancel, and Save. A changed field followed by Back or Cancel demonstrates a three-choice guard (save and continue, discard, continue editing). Save changes the selected demo item's name and note for the current session.
+My places is its own page with filtering, pinned/recent/name sorting, pin toggles, and removal. Compact rows put each name and its actions together, without editing dates. Selecting the name opens map detail, and that detail returns directly to My places. Edit is a child page with Back, Cancel, and Save. A changed field followed by Back or Cancel demonstrates a three-choice guard (save and continue, discard, continue editing). Save changes the selected demo item's name and note for the current session.
 
 Settings returns to the page from which it opened. Only this page offers 移除 API key. Its confirmation states that favorites and notes remain. Removal changes a RAM-only status. The prototype never accepts or reveals an actual key. Production semantics would be this browser and origin, not a device-wide deletion. Favorites, notes, and storage explanation belong here too. API key replacement is the same boundary: changing the key must retain favorites and notes. The replacement setup form is deliberately outside this navigation prototype.
 
@@ -34,4 +40,6 @@ Clean-state screenshots also check `window.scrollY === 0` and toolbar top at zer
 
 ## Final design review
 
-Independent review passed the final artifact at index.html SHA256 `a31c887806b28468303b38d1a57bce2a433f0c490d0f91a7d66d9fba6285f713`. Initial unsearched states show only the compact toolbar and map, with no empty sheet or sidebar. Mobile toolbar is 60 px and wide toolbar is 64 px; the wider height is an accepted responsive design choice. Final representative checks covered 320, 390 and 1440 px, query cancellation, per-mode conditions, saved-item editing, the three-choice draft guard, and settings removal preserving favorites.
+Independent review passed the preceding artifact at index.html SHA256 `a31c887806b28468303b38d1a57bce2a433f0c490d0f91a7d66d9fba6285f713`, before the compact My places revision above. Initial unsearched states show only the compact toolbar and map, with no empty sheet or sidebar. Mobile toolbar is 60 px and wide toolbar is 64 px; the wider height is a proposed responsive design choice. Those representative checks covered 320, 390 and 1440 px, query cancellation, per-mode conditions, saved-item editing, the three-choice draft guard, and settings removal preserving favorites.
+
+The compact My places revision passed independent headless review. Checks covered same-row 44 px actions and no overflow at 320, 390, 402, and 1440 px. At 320 px, a long renamed second item retained its own note, pin state, detail destination, and removal identity. Updated screenshots are `screenshots/A-saved-{320,390,402,1440}.png`.

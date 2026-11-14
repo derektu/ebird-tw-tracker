@@ -233,7 +233,9 @@ test("save failure retains its destination and all fields; reloading, sorting an
   await expect(field(page, "筆記")).toHaveValue("使用西入口");
   await button(manager(page), "返回收藏清單").click();
   await button(dialog(page), "儲存").click();
+  await expect(dialog(page)).toHaveCount(0);
   await expect(rows(page)).toHaveCount(30);
+  await expect(rows(page).first()).toContainText("ABC");
   await page.reload();
   await openManager(page);
   await expect(rows(page).first()).toContainText("ABC");

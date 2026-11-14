@@ -883,7 +883,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
   .search-form-overlay .bird-spots-dialog { border-radius: 18px 18px 0 0; padding: 16px; max-height: 100%; }
   .search-form-overlay .search-form { margin-top: 16px; }
   .search-form-overlay .search-form .field { width: 100%; }
-  .search-form-overlay .search-form > button { flex: 1; }
+  .search-form-overlay .search-form > button { flex: 1; white-space: nowrap; }
 }
 .search-inline-form { padding: 12px 16px; }
 .search-inline-form .search-panel-heading h1 { font-size: 16px; }

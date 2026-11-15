@@ -871,13 +871,14 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
   .search-wide-navigation button { padding-inline: 6px; }
 }
 @media (max-width: 720px) {
-  .search-navigation { min-height: 60px; padding: 4px 6px; }
+  .search-navigation { position: relative; min-height: 60px; padding: 4px 6px; }
   .search-menu-toggle { display: block; }
+  .search-menu-toggle::after { content: ""; position: absolute; inset: 0; }
   .search-wide-navigation { display: none; }
   .search-navigation-context { gap: 4px; }
   .search-navigation-context strong { font-size: 14px; }
   .search-navigation-context small { font-size: 12px; }
-  .search-navigation .mobile-edit-search-button { font-size: 13px; padding-inline: 8px; }
+  .search-navigation .mobile-edit-search-button { position: relative; z-index: 1; font-size: 13px; padding-inline: 8px; }
   .search-navigation-overlay, .search-form-overlay { padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
   .search-form-overlay { align-items: flex-end; }
   .search-form-overlay .bird-spots-dialog { border-radius: 18px 18px 0 0; padding: 16px; max-height: 100%; }

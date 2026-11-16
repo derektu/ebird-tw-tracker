@@ -45,6 +45,16 @@ test.describe("mobile toolbar tap targets", () => {
     test(`title, blank area and padding open the menu at ${width}px without intercepting actions`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
       await setup(page);
+      for (const key of ["Enter", "Space"]) {
+        await button(page, "開啟主選單").focus();
+        await expect(button(page, "開啟主選單")).toBeFocused();
+        await page.keyboard.press(key);
+        await expect(menu(page)).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(menu(page)).toHaveCount(0);
+        await expect(button(toolbar(page), "搜尋")).toBeFocused();
+      }
+
       const context = toolbar(page).locator(".search-navigation-context");
       await tapCenter(page, context.locator("strong"));
       await expectMenuAndClose(page);
@@ -65,16 +75,6 @@ test.describe("mobile toolbar tap targets", () => {
       await expect(menu(page)).toHaveCount(0);
       expect(bar.height).toBeLessThanOrEqual(64);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-
-      for (const key of ["Enter", "Space"]) {
-        await button(page, "開啟主選單").focus();
-        await expect(button(page, "開啟主選單")).toBeFocused();
-        await page.keyboard.press(key);
-        await expect(menu(page)).toBeVisible();
-        await page.keyboard.press("Escape");
-        await expect(menu(page)).toHaveCount(0);
-        await expect(button(toolbar(page), "搜尋")).toBeFocused();
-      }
 
       await button(toolbar(page), "搜尋").tap();
       await expect(menu(page)).toHaveCount(0);

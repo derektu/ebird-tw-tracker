@@ -66,3 +66,9 @@ test("a storage write failure still returns the updated in-memory list", () => {
 
   assert.deepEqual(recordRecentSpecies(grpsni1, storage), [grpsni1]);
 });
+
+test("malformed legacy entries cannot break the next successful search", () => {
+  const storage = fakeStorage({ "search-recent-species": JSON.stringify([null, {}, "bad", grpsni1, grpsni1]) });
+  assert.deepEqual(readRecentSpecies(storage), [grpsni1]);
+  assert.deepEqual(recordRecentSpecies(yebgre1, storage), [yebgre1, grpsni1]);
+});

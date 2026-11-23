@@ -15,7 +15,15 @@ function readList(storage) {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set();
+    return parsed.filter(entry => {
+      if (!entry || typeof entry.speciesCode !== "string" || !entry.speciesCode.trim()
+        || typeof entry.comName !== "string" || !entry.comName.trim() || typeof entry.sciName !== "string"
+        || seen.has(entry.speciesCode)) return false;
+      seen.add(entry.speciesCode);
+      return true;
+    }).slice(0, MAX_RECENT_SPECIES);
   } catch {
     return [];
   }

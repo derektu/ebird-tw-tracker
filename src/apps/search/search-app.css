@@ -895,3 +895,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visi
 }
 .search-inline-form > .search-panel-actions { display: none; }
 .search-settings-overlay .search-panel-heading > .spot-icon-button { order: -1; }
+
+/* Keep the dropdown in the scrollable form while the mobile keyboard is open. */
+@media (max-width: 720px) {
+  .search-form .suggestions { position: relative; top: auto; max-height: 176px; }
+}
+.query-history .suggestion strong { overflow-wrap: anywhere; }

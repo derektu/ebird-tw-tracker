@@ -11,6 +11,7 @@ import { createSearchAppRuntime } from "./search-app-runtime.mjs";
 import { createIndexedDbSearchSnapshotStore } from "./browser-search-snapshot-store.mjs";
 import { createSearchWorkflow } from "../../features/search/search-workflow.mjs";
 import { readRecentSpecies, recordRecentSpecies } from "./recent-species-store.mjs";
+import { readRecentQueries, recordRecentQuery } from "./recent-query-store.mjs";
 
 import { useSearchBirdSpots } from "./useSearchBirdSpots";
 import { SearchBirdSpotDetail, SearchBirdSpotMessages, type SheetState } from "./SearchBirdSpotDetail";
@@ -94,8 +95,8 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const [days, setDays] = useState("3");
   const [selectedSpecies, setSelectedSpecies] = useState<Species | null>(null);
   const [suggestions, setSuggestions] = useState<Species[]>([]);
-  const [recentSpecies, setRecentSpecies] = useState<Species[]>(() => readRecentSpecies());
-  const [showRecent, setShowRecent] = useState(false);
+  const [recentQueries, setRecentQueries] = useState(() => ({ species: readRecentQueries("species"), spots: readRecentQueries("spots") }));
+  const [dropdown, setDropdown] = useState<"closed" | "history" | "suggestions">("closed");
   const [busy, setBusy] = useState(false);
   const [species, setSpecies] = useState<Species | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -170,7 +171,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
             if (window.matchMedia("(max-width: 720px)").matches) compactSearchRef.current?.focus();
           });
           setSuggestions([]);
-          setRecentSpecies(recordRecentSpecies(result.species));
+          recordRecentSpecies(result.species);
           return;
         }
         setErrorMessage(event.error.message);
@@ -300,15 +301,15 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   }, [mode, query, selectedSpecies?.comName]);
 
   useEffect(() => {
-    if (!suggestions.length && !showRecent) return;
+    if (dropdown === "closed") return;
     const close = (event: MouseEvent) => {
       if (!(event.target instanceof Node) || fieldRef.current?.contains(event.target)) return;
       setSuggestions([]);
-      setShowRecent(false);
+      setDropdown("closed");
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
-  }, [suggestions.length, showRecent]);
+  }, [dropdown]);
 
   const detailSpot = birdSpots.detailSpot;
   const detailLat = detailSpot?.lat, detailLng = detailSpot?.lng;
@@ -367,14 +368,22 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const chooseSpecies = useCallback((chosen: Species) => {
     setSelectedSpecies(chosen);
     setQuery(chosen.comName);
+    searchInputRef.current?.focus();
     setSuggestions([]);
-    setShowRecent(false);
+    setDropdown("closed");
   }, []);
+
+  const rememberQuery = (queryMode: "species" | "spots", text: string) => {
+    if (text.trim()) setRecentQueries(previous => ({ ...previous, [queryMode]: recordRecentQuery(queryMode, text, undefined, previous[queryMode]) }));
+    setDropdown("closed");
+    setSuggestions([]);
+  };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     editor.request("search", () => {
       if (mode === "spots") {
+        rememberQuery("spots", directory.query);
         workflow.invalidate();
         navigation.search("spot-results");
         void directory.search();
@@ -392,6 +401,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
         setErrorMessage("請輸入鳥種名稱、英文名或 species code");
         return;
       }
+      rememberQuery("species", normalizedQuery);
       directory.cancel();
       navigation.search("results");
       void workflow.run({ source: "explicit", species: chosen, query: chosen ? undefined : normalizedQuery, days: Number(days) });
@@ -405,7 +415,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     setSelectedSpecies(committed.current.selected);
     directory.setQuery(committed.current.spotQuery);
     setSuggestions([]);
-    setShowRecent(false);
+    setDropdown("closed");
     setErrorMessage(null);
     setControlsExpanded(false);
     requestAnimationFrame(() => compactSearchRef.current?.focus({ preventScroll: true }));
@@ -444,7 +454,21 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
     setOverlay({ kind: "none" });
     requestAnimationFrame(() => (navigation.managerVisible ? navigation.managerHeader.current : compactSearchRef.current)?.focus({ preventScroll: true }));
   };
-  const showingRecent = showRecent && !suggestions.length && !query.trim() && recentSpecies.length > 0;
+  const showingRecent = dropdown === "history" && recentQueries[mode].length > 0;
+  const showingSuggestions = dropdown === "suggestions" && mode === "species" && suggestions.length > 0;
+  const closeDropdown = () => { setDropdown("closed"); setSuggestions([]); };
+  const recentSpeciesMetadata = mode === "species" ? readRecentSpecies() : [];
+  const historyPanel = showingRecent && <div className="suggestions query-history" aria-label={mode === "species" ? "最近搜尋鳥種" : "最近搜尋鳥點"}>
+    {recentQueries[mode].map(recent => {
+      const metadata = recentSpeciesMetadata.find(species => species.comName === recent);
+      return <button className="suggestion" type="button" key={recent} onPointerDown={event => event.preventDefault()} onClick={event => {
+      event.preventDefault();
+      if (mode === "species") { setQuery(recent); setSelectedSpecies(null); } else directory.setQuery(recent);
+      searchInputRef.current?.focus();
+      closeDropdown();
+    }}><strong>{recent}</strong>{metadata && <span>{metadata.sciName} / {metadata.speciesCode}</span>}</button>;
+    })}
+  </div>;
 
   const comparisonPresentation = presentSearchComparison(comparison);
 
@@ -455,10 +479,19 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
   const managerEditing = navigation.managerVisible && navigation.manager?.kind === "saved-edit";
   const obstructed = editor.leave.kind !== "idle" || (controlsExpanded && mobile) || overlay.kind !== "none";
   const formPanel = controlsExpanded && <SearchFormPanel inline={!mobile} title={mode === "species" ? "搜尋台灣鳥種觀察紀錄" : "搜尋鳥點"} onCancel={cancelForm}>
-        <form className="search-form" onSubmit={submitSearch}>
-          {mode === "spots" ? <label className="field species-field"><span>鳥點名稱</span>
-            <input ref={searchInputRef} value={directory.query} onChange={event => directory.setQuery(event.target.value)} placeholder="地名、地區、收藏別名或筆記" />
-          </label> : <><label className="field species-field" ref={fieldRef}>
+        <form className="search-form" onSubmit={submitSearch} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDropdown(); }} onKeyDown={event => {
+          if (event.key === "Escape" && (showingRecent || showingSuggestions)) {
+            event.preventDefault(); event.stopPropagation(); searchInputRef.current?.focus(); closeDropdown();
+          }
+          if (event.key === "ArrowDown" && event.target === searchInputRef.current) {
+            const first = fieldRef.current?.querySelector<HTMLButtonElement>(".suggestion");
+            if (first) { event.preventDefault(); first.focus(); }
+          }
+        }}>
+          {mode === "spots" ? <label className="field species-field" ref={fieldRef} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDropdown(); }}><span>鳥點名稱</span>
+            <input ref={searchInputRef} aria-label="鳥點名稱" value={directory.query} autoComplete="off" onFocus={() => setDropdown("history")} onClick={() => setDropdown("history")} onChange={event => { setDropdown("closed"); directory.setQuery(event.target.value); }} placeholder="地名、地區、收藏別名或筆記" />
+            {historyPanel}
+          </label> : <><label className="field species-field" ref={fieldRef} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDropdown(); }}>
             <span>鳥種</span>
             <input
               type="text"
@@ -468,20 +501,24 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
               placeholder="輸入中文名、英文名或 species code"
               ref={searchInputRef}
               disabled={busy}
-              onFocus={() => setShowRecent(true)}
+              onFocus={() => setDropdown("history")}
+              onClick={() => setDropdown("history")}
               onChange={(event) => {
+                setDropdown("suggestions");
+                setSuggestions([]);
                 setQuery(event.target.value);
                 setSelectedSpecies(null);
               }}
             />
-            {suggestions.length > 0 && (
+            {showingSuggestions && (
               <div className="suggestions">
                 {suggestions.map((suggestion) => (
                   <button
                     className="suggestion"
                     type="button"
                     key={suggestion.speciesCode}
-                    onClick={() => chooseSpecies(suggestion)}
+                    onPointerDown={event => event.preventDefault()}
+                    onClick={event => { event.preventDefault(); chooseSpecies(suggestion); }}
                   >
                     <strong>{suggestion.comName}</strong>
                     <span>{suggestion.sciName} / {suggestion.speciesCode}</span>
@@ -489,21 +526,7 @@ export function SearchWorkspace({ onForgetKey }: { onForgetKey(): void }) {
                 ))}
               </div>
             )}
-            {showingRecent && (
-              <div className="suggestions" aria-label="最近搜尋鳥種">
-                {recentSpecies.map((recent) => (
-                  <button
-                    className="suggestion"
-                    type="button"
-                    key={recent.speciesCode}
-                    onClick={() => chooseSpecies(recent)}
-                  >
-                    <strong>{recent.comName}</strong>
-                    <span>{recent.sciName} / {recent.speciesCode}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {historyPanel}
           </label>
           <label className="field days-field">
             <span>最近天數</span>
